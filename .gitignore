@@ -71,11 +71,3 @@ Scripts/
 Tests/
 bin/
 docs/
-
-# Project-owned test and release automation
-!ModbusConfigTool/Tests/
-!ModbusConfigTool/Tests/**
-!ModbusConfigTool/Scripts/
-!ModbusConfigTool/Scripts/**
-ModbusConfigTool/Tests/build/
-ModbusConfigTool/Tests/bin/
