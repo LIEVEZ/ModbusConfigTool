@@ -16,21 +16,22 @@ GroupPanelView::GroupPanelView(QWidget *parent) : QWidget(parent)
     m_countBadge = new QLabel(this);
     titleRow->addWidget(title, 1); titleRow->addWidget(m_countBadge);
     auto *buttons = new QHBoxLayout;
-    auto *addButton = new QPushButton(QStringLiteral("新增分组"), this);
+    m_addButton = new QPushButton(QStringLiteral("新增分组"), this);
     m_removeButton = new QPushButton(QStringLiteral("删除分组"), this);
-    buttons->addWidget(addButton); buttons->addWidget(m_removeButton);
+    buttons->addWidget(m_addButton); buttons->addWidget(m_removeButton);
     m_tree = new QTreeWidget(this);
     m_tree->setHeaderLabels({QStringLiteral("分组"), QStringLiteral("数量")});
-    auto *batchButton = new QPushButton(QStringLiteral("批量编辑"), this);
-    batchButton->setObjectName(QStringLiteral("primaryButton"));
-    layout->addLayout(titleRow); layout->addLayout(buttons); layout->addWidget(m_tree, 1); layout->addWidget(batchButton);
-    connect(addButton, &QPushButton::clicked, this, &GroupPanelView::addRequested);
+    m_batchButton = new QPushButton(QStringLiteral("批量编辑"), this);
+    m_batchButton->setObjectName(QStringLiteral("primaryButton"));
+    layout->addLayout(titleRow); layout->addLayout(buttons); layout->addWidget(m_tree, 1); layout->addWidget(m_batchButton);
+    connect(m_addButton, &QPushButton::clicked, this, &GroupPanelView::addRequested);
     connect(m_removeButton, &QPushButton::clicked, this, &GroupPanelView::removeRequested);
-    connect(batchButton, &QPushButton::clicked, this, &GroupPanelView::batchEditRequested);
+    connect(m_batchButton, &QPushButton::clicked, this, &GroupPanelView::batchEditRequested);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item)
     {
         if (!item) { return; }
-        m_removeButton->setEnabled(!item->data(0, Qt::UserRole + 1).toBool());
+        m_removeButton->setEnabled(m_editingEnabled
+                                   && !item->data(0, Qt::UserRole + 1).toBool());
         emit groupSelected(item->data(0, Qt::UserRole).toString(), item->text(0));
     });
 }
@@ -61,4 +62,14 @@ void GroupPanelView::setGroups(const QList<RegisterGroup> &groups,
 QString GroupPanelView::selectedGroupId() const
 {
     return m_tree->currentItem() ? m_tree->currentItem()->data(0, Qt::UserRole).toString() : QString();
+}
+
+void GroupPanelView::setEditingEnabled(bool enabled)
+{
+    m_editingEnabled = enabled;
+    m_addButton->setEnabled(enabled);
+    m_batchButton->setEnabled(enabled);
+    const bool defaultOrAll = !m_tree->currentItem()
+        || m_tree->currentItem()->data(0, Qt::UserRole + 1).toBool();
+    m_removeButton->setEnabled(enabled && !defaultOrAll);
 }

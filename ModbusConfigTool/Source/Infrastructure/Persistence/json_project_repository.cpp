@@ -143,7 +143,10 @@ ProjectLoadResult JsonProjectRepository::load(const QString &path) const
     document.serverProfile.tcpPort = quint16(profile.value(QStringLiteral("tcpPort")).toInt(5020));
     document.serverProfile.serialPort = profile.value(QStringLiteral("serialPort")).toString();
     document.serverProfile.baudRate = profile.value(QStringLiteral("baudRate")).toInt(9600);
-    document.serverProfile.parity = profile.value(QStringLiteral("parity")).toString(QStringLiteral("N")).at(0);
+    const QString parity = profile.value(QStringLiteral("parity")).toString(QStringLiteral("N"));
+    document.serverProfile.parity = parity.isEmpty() ? QLatin1Char('N') : parity.at(0);
+    document.serverProfile.dataBits = profile.value(QStringLiteral("dataBits")).toInt(8);
+    document.serverProfile.stopBits = profile.value(QStringLiteral("stopBits")).toInt(1);
     document.serverProfile.pollIntervalMs = profile.value(QStringLiteral("pollIntervalMs")).toInt(1000);
     document.serverProfile.slaveAddress = quint8(profile.value(QStringLiteral("slaveAddress")).toInt(1));
     for (const QJsonValue &value : root.value(QStringLiteral("groups")).toArray())
@@ -160,6 +163,18 @@ ProjectLoadResult JsonProjectRepository::load(const QString &path) const
     for (const QJsonValue &value : root.value(QStringLiteral("registers")).toArray())
     {
         document.registers.append(pointFromJson(value.toObject()));
+    }
+    const QJsonObject uiState = root.value(QStringLiteral("uiState")).toObject();
+    document.uiState.windowSize = QSize(uiState.value(QStringLiteral("width")).toInt(1440),
+                                        uiState.value(QStringLiteral("height")).toInt(900));
+    document.uiState.selectedGroupId = uiState.value(QStringLiteral("selectedGroupId")).toString();
+    for (const QJsonValue &value : uiState.value(QStringLiteral("horizontalSplitterSizes")).toArray())
+    {
+        document.uiState.horizontalSplitterSizes.append(value.toInt());
+    }
+    for (const QJsonValue &value : uiState.value(QStringLiteral("verticalSplitterSizes")).toArray())
+    {
+        document.uiState.verticalSplitterSizes.append(value.toInt());
     }
     output.result = ValidationService::validateProject(document);
     if (output.result.success) { output.document = document; }
@@ -186,6 +201,8 @@ OperationResult JsonProjectRepository::save(const QString &path,
     profile.insert(QStringLiteral("serialPort"), document.serverProfile.serialPort);
     profile.insert(QStringLiteral("baudRate"), document.serverProfile.baudRate);
     profile.insert(QStringLiteral("parity"), QString(document.serverProfile.parity));
+    profile.insert(QStringLiteral("dataBits"), document.serverProfile.dataBits);
+    profile.insert(QStringLiteral("stopBits"), document.serverProfile.stopBits);
     profile.insert(QStringLiteral("pollIntervalMs"), document.serverProfile.pollIntervalMs);
     profile.insert(QStringLiteral("slaveAddress"), int(document.serverProfile.slaveAddress));
     root.insert(QStringLiteral("serverProfile"), profile);
@@ -204,7 +221,17 @@ OperationResult JsonProjectRepository::save(const QString &path,
     QJsonArray registers;
     for (const RegisterPoint &point : document.registers) { registers.append(pointToJson(point)); }
     root.insert(QStringLiteral("registers"), registers);
-    root.insert(QStringLiteral("uiState"), QJsonObject());
+    QJsonObject uiState;
+    uiState.insert(QStringLiteral("width"), document.uiState.windowSize.width());
+    uiState.insert(QStringLiteral("height"), document.uiState.windowSize.height());
+    uiState.insert(QStringLiteral("selectedGroupId"), document.uiState.selectedGroupId);
+    QJsonArray horizontalSizes;
+    for (int size : document.uiState.horizontalSplitterSizes) { horizontalSizes.append(size); }
+    QJsonArray verticalSizes;
+    for (int size : document.uiState.verticalSplitterSizes) { verticalSizes.append(size); }
+    uiState.insert(QStringLiteral("horizontalSplitterSizes"), horizontalSizes);
+    uiState.insert(QStringLiteral("verticalSplitterSizes"), verticalSizes);
+    root.insert(QStringLiteral("uiState"), uiState);
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly))

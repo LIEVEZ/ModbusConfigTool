@@ -18,12 +18,15 @@ public:
     RuntimeState state() const;
     void start(const ProjectDocument &document);
     void stop();
+    void writePoint(const QString &pointId, const RegisterValue &value);
 
 signals:
     void startWorker(const ServerProfile &profile, const QList<RegisterPoint> &points);
     void stopWorker();
+    void writeWorkerPoint(const QString &pointId, const RegisterValue &value);
     void stateChanged(RuntimeState state);
     void errorOccurred(const QString &message, const QString &detail);
+    void valueChanged(const QString &pointId, const RegisterValue &value);
 
 private:
     void setState(RuntimeState state);

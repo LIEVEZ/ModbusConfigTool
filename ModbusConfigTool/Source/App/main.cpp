@@ -1,4 +1,5 @@
 #include "Views/Main/main_window.h"
+#include "App/application_composition_root.h"
 
 #include <QApplication>
 #include <QFile>
@@ -34,7 +35,10 @@ int main(int argc, char *argv[])
     application.setOrganizationName(QStringLiteral("LIEVE"));
     application.setStyleSheet(loadStyleSheet());
 
-    MainWindow window;
-    window.show();
-    return application.exec();
+    ApplicationCompositionRoot compositionRoot;
+    MainWindow *window = compositionRoot.createMainWindow();
+    window->show();
+    const int result = application.exec();
+    delete window;
+    return result;
 }

@@ -10,6 +10,7 @@ class QCheckBox;
 class QComboBox;
 class QLineEdit;
 class QSpinBox;
+class StrategyEditorWidget;
 
 class RegisterEditorDialog : public QDialog
 {
@@ -21,6 +22,9 @@ public:
                                   QWidget *parent = nullptr);
     RegisterPoint point() const;
 
+signals:
+    void manualWriteRequested(const RegisterValue &value);
+
 private:
     RegisterPoint m_original;
     QComboBox *m_group = nullptr;
@@ -31,10 +35,9 @@ private:
     QComboBox *m_endian = nullptr;
     QComboBox *m_storage = nullptr;
     QLineEdit *m_protocolKey = nullptr;
-    QLineEdit *m_value = nullptr;
     QCheckBox *m_enabled = nullptr;
-    QComboBox *m_strategyType = nullptr;
-    QCheckBox *m_strategyEnabled = nullptr;
+    StrategyEditorWidget *m_strategyEditor = nullptr;
+    QLineEdit *m_value = nullptr;
 };
 
 #endif

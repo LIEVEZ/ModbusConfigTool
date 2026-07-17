@@ -27,6 +27,10 @@ RegisterConfigView::RegisterConfigView(QWidget *parent) : QWidget(parent)
     auto *disable = new QPushButton(QStringLiteral("停用"), this);
     add->setObjectName(QStringLiteral("primaryButton"));
     remove->setObjectName(QStringLiteral("dangerButton"));
+    for (QPushButton *button : {add, edit, remove, enable, disable})
+    {
+        button->setProperty("mappingAction", true);
+    }
     const QList<QWidget *> toolWidgets = {mode, search, add, edit, remove, enable, disable};
     for (QWidget *widget : toolWidgets) { tools->addWidget(widget); }
     tools->setStretch(1, 1);
@@ -53,6 +57,14 @@ RegisterConfigView::RegisterConfigView(QWidget *parent) : QWidget(parent)
     connect(m_table, &QTableView::doubleClicked, this, [this](const QModelIndex &) { emit editRequested(currentPointId()); });
 }
 
+void RegisterConfigView::setMappingEditingEnabled(bool enabled)
+{
+    for (QPushButton *button : findChildren<QPushButton *>())
+    {
+        if (button->property("mappingAction").toBool()) { button->setEnabled(enabled); }
+    }
+}
+
 void RegisterConfigView::setDocument(const ProjectDocument *document) { m_model->setDocument(document); }
 void RegisterConfigView::setGroupFilter(const QString &groupName) { m_proxy->setGroupName(groupName); }
 
@@ -71,4 +83,24 @@ QString RegisterConfigView::currentPointId() const
 {
     const QModelIndex index = m_table->currentIndex();
     return index.isValid() ? m_model->pointId(m_proxy->mapToSource(index).row()) : QString();
+}
+
+void RegisterConfigView::refreshPoint(const QString &pointId)
+{
+    m_model->refreshPoint(pointId);
+}
+
+void RegisterConfigView::selectPoint(const QString &pointId)
+{
+    for (int row = 0; row < m_model->rowCount(); ++row)
+    {
+        if (m_model->pointId(row) != pointId) { continue; }
+        const QModelIndex proxyIndex = m_proxy->mapFromSource(m_model->index(row, 0));
+        if (proxyIndex.isValid())
+        {
+            m_table->setCurrentIndex(proxyIndex);
+            m_table->scrollTo(proxyIndex, QAbstractItemView::PositionAtCenter);
+        }
+        return;
+    }
 }

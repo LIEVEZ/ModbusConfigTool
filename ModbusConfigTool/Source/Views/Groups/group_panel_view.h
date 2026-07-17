@@ -18,6 +18,7 @@ public:
     explicit GroupPanelView(QWidget *parent = nullptr);
     void setGroups(const QList<RegisterGroup> &groups, const QList<RegisterPoint> &points);
     QString selectedGroupId() const;
+    void setEditingEnabled(bool enabled);
 
 signals:
     void groupSelected(const QString &groupId, const QString &groupName);
@@ -29,6 +30,9 @@ private:
     QLabel *m_countBadge = nullptr;
     QTreeWidget *m_tree = nullptr;
     QPushButton *m_removeButton = nullptr;
+    QPushButton *m_addButton = nullptr;
+    QPushButton *m_batchButton = nullptr;
+    bool m_editingEnabled = true;
 };
 
 #endif

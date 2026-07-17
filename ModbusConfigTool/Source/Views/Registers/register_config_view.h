@@ -20,6 +20,9 @@ public:
     void setGroupFilter(const QString &groupName);
     QStringList selectedPointIds() const;
     QString currentPointId() const;
+    void refreshPoint(const QString &pointId);
+    void selectPoint(const QString &pointId);
+    void setMappingEditingEnabled(bool enabled);
 
 signals:
     void addRequested();

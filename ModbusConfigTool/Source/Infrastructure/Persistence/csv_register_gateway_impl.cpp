@@ -4,6 +4,8 @@
 #include "Domain/Validation/validation_service.h"
 
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSaveFile>
 #include <QTextStream>
 #include <QUuid>
@@ -64,7 +66,36 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         point.slaveAddress = quint8(field(QStringLiteral("slave_address")).toUInt()); point.name = field(QStringLiteral("name")); point.protocolKey = field(QStringLiteral("protocol_key"));
         if (!dataTypeFromString(field(QStringLiteral("data_type")), &point.dataType)) { output.result = OperationResult::fail(QStringLiteral("invalid_type"), QStringLiteral("data_type"), QStringLiteral("CSV 第 %1 行数据类型无效").arg(lineNumber)); return output; }
         point.registerCount = ProjectFactory::registerCountFor(point.dataType); point.minimumValue = ProjectFactory::minimumFor(point.dataType); point.maximumValue = ProjectFactory::maximumFor(point.dataType);
+        if (headers.contains(QStringLiteral("endian"))) { endianFromString(field(QStringLiteral("endian")), &point.endian); }
+        if (headers.contains(QStringLiteral("storage_type"))) { storageTypeFromString(field(QStringLiteral("storage_type")), &point.storageType); }
+        if (headers.contains(QStringLiteral("read_function_code"))) { point.readFunctionCode = quint8(field(QStringLiteral("read_function_code")).toUInt()); }
+        if (headers.contains(QStringLiteral("write_function_code"))) { point.writeFunctionCode = field(QStringLiteral("write_function_code")).toInt(); }
+        if (headers.contains(QStringLiteral("unit"))) { point.unit = field(QStringLiteral("unit")); }
+        if (headers.contains(QStringLiteral("offset"))) { point.offset = field(QStringLiteral("offset")).toDouble(); }
+        if (headers.contains(QStringLiteral("precision"))) { point.precision = field(QStringLiteral("precision")).toInt(); }
+        if (headers.contains(QStringLiteral("min_value")))
+        {
+            const ValueResult minimum = RegisterValue::fromText(point.dataType, field(QStringLiteral("min_value")));
+            if (!minimum.result.success) { output.result = minimum.result; return output; }
+            point.minimumValue = minimum.value;
+        }
+        if (headers.contains(QStringLiteral("max_value")))
+        {
+            const ValueResult maximum = RegisterValue::fromText(point.dataType, field(QStringLiteral("max_value")));
+            if (!maximum.result.success) { output.result = maximum.result; return output; }
+            point.maximumValue = maximum.value;
+        }
         const ValueResult value = RegisterValue::fromText(point.dataType, field(QStringLiteral("current_value"))); if (!value.result.success) { output.result = value.result; return output; } point.currentValue = value.value;
+        if (headers.contains(QStringLiteral("enabled"))) { point.enabled = field(QStringLiteral("enabled")).trimmed().toLower() != QStringLiteral("false"); }
+        if (headers.contains(QStringLiteral("category"))) { point.category = field(QStringLiteral("category")); }
+        if (headers.contains(QStringLiteral("label"))) { point.label = field(QStringLiteral("label")); }
+        if (headers.contains(QStringLiteral("strategy_type"))) { strategyTypeFromString(field(QStringLiteral("strategy_type")), &point.strategy.type); }
+        if (headers.contains(QStringLiteral("strategy_enabled"))) { point.strategy.enabled = field(QStringLiteral("strategy_enabled")).trimmed().toLower() == QStringLiteral("true"); }
+        if (headers.contains(QStringLiteral("strategy_params")))
+        {
+            const QJsonDocument parameters = QJsonDocument::fromJson(field(QStringLiteral("strategy_params")).toUtf8());
+            if (parameters.isObject()) { point.strategy.parameters = parameters.object().toVariantMap(); }
+        }
         output.registers.append(point);
     }
     ProjectDocument candidate = current; candidate.groups = output.groups; candidate.registers += output.registers;
@@ -80,7 +111,8 @@ OperationResult CsvRegisterGatewayImpl::exportFile(const QString &path,
     for (const RegisterPoint &point : document.registers)
     {
         QString groupName; for (const RegisterGroup &group : document.groups) { if (group.id == point.groupId) { groupName = group.name; break; } }
-        stream << quoteCsv(groupName) << ',' << point.slaveAddress << ',' << point.address << ',' << point.registerCount << ',' << quoteCsv(point.name) << ',' << dataTypeToString(point.dataType) << ',' << endianToString(point.endian) << ',' << storageTypeToString(point.storageType) << ',' << point.readFunctionCode << ',' << point.writeFunctionCode << ',' << quoteCsv(point.protocolKey) << ',' << quoteCsv(point.unit) << ',' << point.offset << ',' << point.precision << ',' << quoteCsv(point.minimumValue.toStorageString()) << ',' << quoteCsv(point.maximumValue.toStorageString()) << ',' << quoteCsv(point.currentValue.toStorageString()) << ',' << (point.enabled ? "true" : "false") << ',' << quoteCsv(point.category) << ',' << quoteCsv(point.label) << ',' << strategyTypeToString(point.strategy.type) << ',' << (point.strategy.enabled ? "true" : "false") << ',' << quoteCsv(QStringLiteral("{}")) << '\n';
+        const QString strategyParameters = QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(point.strategy.parameters)).toJson(QJsonDocument::Compact));
+        stream << quoteCsv(groupName) << ',' << point.slaveAddress << ',' << point.address << ',' << point.registerCount << ',' << quoteCsv(point.name) << ',' << dataTypeToString(point.dataType) << ',' << endianToString(point.endian) << ',' << storageTypeToString(point.storageType) << ',' << point.readFunctionCode << ',' << point.writeFunctionCode << ',' << quoteCsv(point.protocolKey) << ',' << quoteCsv(point.unit) << ',' << point.offset << ',' << point.precision << ',' << quoteCsv(point.minimumValue.toStorageString()) << ',' << quoteCsv(point.maximumValue.toStorageString()) << ',' << quoteCsv(point.currentValue.toStorageString()) << ',' << (point.enabled ? "true" : "false") << ',' << quoteCsv(point.category) << ',' << quoteCsv(point.label) << ',' << strategyTypeToString(point.strategy.type) << ',' << (point.strategy.enabled ? "true" : "false") << ',' << quoteCsv(strategyParameters) << '\n';
     }
     stream.flush(); if (!file.commit()) { return OperationResult::fail(QStringLiteral("csv_commit_failed"), QStringLiteral("path"), QStringLiteral("无法原子保存 CSV 文件"), file.errorString()); }
     return OperationResult::ok();

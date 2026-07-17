@@ -4,16 +4,13 @@
 #include <QMainWindow>
 
 class EventLogView;
-class CsvRegisterGatewayImpl;
 class GroupPanelView;
-class JsonProjectRepository;
-class ProjectService;
+class MainWindowViewModel;
 class RegisterConfigView;
-class RegisterService;
 class RuntimeControlView;
-class RuntimeService;
 class RuntimeValueView;
 class StatusBarView;
+class QMenu;
 struct OperationResult;
 
 class MainWindow : public QMainWindow
@@ -21,7 +18,8 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(MainWindowViewModel *viewModel = nullptr,
+                        QWidget *parent = nullptr);
     ~MainWindow() override;
 
 protected:
@@ -41,18 +39,16 @@ private:
     void addRegister();
     void editRegister(const QString &pointId);
     void showResult(const OperationResult &result, const QString &successMessage);
+    void rebuildRecentMenu();
 
-    JsonProjectRepository *m_repository = nullptr;
-    CsvRegisterGatewayImpl *m_csvGateway = nullptr;
-    ProjectService *m_projectService = nullptr;
-    RegisterService *m_registerService = nullptr;
-    RuntimeService *m_runtimeService = nullptr;
+    MainWindowViewModel *m_viewModel = nullptr;
     RuntimeControlView *m_runtimeControl = nullptr;
     GroupPanelView *m_groupPanel = nullptr;
     RegisterConfigView *m_registerView = nullptr;
     RuntimeValueView *m_runtimeValueView = nullptr;
     EventLogView *m_logView = nullptr;
     StatusBarView *m_statusView = nullptr;
+    QMenu *m_recentMenu = nullptr;
 };
 
 #endif

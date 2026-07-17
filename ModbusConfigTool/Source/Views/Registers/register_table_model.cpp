@@ -66,6 +66,19 @@ QString RegisterTableModel::pointId(int row) const
         ? m_document->registers.at(row).id : QString();
 }
 
+void RegisterTableModel::refreshPoint(const QString &pointId)
+{
+    if (!m_document) { return; }
+    for (int row = 0; row < m_document->registers.size(); ++row)
+    {
+        if (m_document->registers.at(row).id == pointId)
+        {
+            emit dataChanged(index(row, 7), index(row, 7), {Qt::DisplayRole});
+            return;
+        }
+    }
+}
+
 QString RegisterTableModel::groupName(const QString &groupId) const
 {
     if (!m_document) { return QString(); }
