@@ -1,0 +1,23 @@
+QWidget {
+    background: #f2f1ed;
+    color: #26251e;
+    font: 13px "Segoe UI", "Microsoft YaHei";
+}
+QMainWindow, QMenuBar, QMenu, QStatusBar {
+    background: #f7f7f4;
+}
+QWidget#card, QWidget#runtimeControlCard {
+    background: #ebeae5;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 10px;
+}
+QLabel#sectionTitle {
+    font: 20px "Bahnschrift", "Segoe UI";
+    background: transparent;
+}
+QLabel#successBadge, QLabel#warningBadge {
+    border-radius: 10px;
+    padding: 4px 9px;
+}
+QLabel#successBadge { color: #1f8a65; background: rgba(31, 138, 101, 28); }
+QLabel#warningBadge { color: #c08532; background: rgba(192, 133, 50, 34); }

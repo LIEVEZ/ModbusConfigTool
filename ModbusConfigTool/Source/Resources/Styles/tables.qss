@@ -1,0 +1,16 @@
+QTableView, QTreeWidget, QPlainTextEdit {
+    background: #f7f7f4;
+    alternate-background-color: #f2f1ed;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 8px;
+    gridline-color: rgba(38, 37, 30, 20);
+    selection-background-color: #f3dfd4;
+    selection-color: #26251e;
+}
+QHeaderView::section {
+    background: #ebeae5;
+    border: 0;
+    border-bottom: 1px solid rgba(38, 37, 30, 24);
+    padding: 8px;
+}
+QPlainTextEdit { font: 12px Consolas, monospace; }

@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/styles">
+        <file alias="base.qss">Styles/base.qss</file>
+        <file alias="controls.qss">Styles/controls.qss</file>
+        <file alias="tables.qss">Styles/tables.qss</file>
+        <file alias="dialogs.qss">Styles/dialogs.qss</file>
+    </qresource>
+</RCC>
