@@ -136,3 +136,108 @@ OperationResult RegisterService::applyPatch(const QStringList &ids, const Regist
     m_projectService->markDirty();
     return OperationResult::ok();
 }
+
+OperationResult RegisterService::addGroup(const RegisterGroup &group)
+{
+    ProjectDocument candidate = m_projectService->document();
+    RegisterGroup added = group;
+    if (added.id.isEmpty())
+    {
+        added.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
+    candidate.groups.append(added);
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success) { return validation; }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
+OperationResult RegisterService::updateGroup(const RegisterGroup &group)
+{
+    ProjectDocument candidate = m_projectService->document();
+    bool found = false;
+    for (RegisterGroup &current : candidate.groups)
+    {
+        if (current.id == group.id) { current = group; found = true; break; }
+    }
+    if (!found)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("id"),
+                                     QStringLiteral("分组不存在"));
+    }
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success) { return validation; }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
+OperationResult RegisterService::setGroupEnabled(const QString &groupId, bool enabled)
+{
+    ProjectDocument candidate = m_projectService->document();
+    for (RegisterGroup &group : candidate.groups)
+    {
+        if (group.id == groupId) { group.enabled = enabled; break; }
+    }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
+OperationResult RegisterService::setGroupPort(const QString &groupId, const QString &portId)
+{
+    ProjectDocument candidate = m_projectService->document();
+    for (RegisterGroup &group : candidate.groups)
+    {
+        if (group.id == groupId) { group.portId = portId; break; }
+    }
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success) { return validation; }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
+OperationResult RegisterService::moveGroup(const QString &groupId, int x, int y)
+{
+    ProjectDocument candidate = m_projectService->document();
+    for (RegisterGroup &group : candidate.groups)
+    {
+        if (group.id == groupId)
+        {
+            group.canvasX = qMax(0, x);
+            group.canvasY = qMax(0, y);
+            break;
+        }
+    }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
+OperationResult RegisterService::importCsvIntoGroup(const QString &groupId,
+                                                    const CsvImportResult &imported,
+                                                    bool replaceGroup)
+{
+    if (!imported.result.success) { return imported.result; }
+    ProjectDocument candidate = m_projectService->document();
+    if (replaceGroup)
+    {
+        for (int i = candidate.registers.size() - 1; i >= 0; --i)
+        {
+            if (candidate.registers.at(i).groupId == groupId) { candidate.registers.removeAt(i); }
+        }
+    }
+    for (RegisterPoint point : imported.registers)
+    {
+        point.groupId = groupId; // 忽略 CSV 分组列，全部归入本组
+        candidate.registers.append(point);
+    }
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success) { return validation; }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}

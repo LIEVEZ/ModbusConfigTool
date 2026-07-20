@@ -2,26 +2,30 @@
 
 #include "Domain/Models/project_factory.h"
 #include "ViewModels/Main/main_window_view_model.h"
+#include "Views/Connection/connection_port_list_view.h"
 #include "Views/Dialogs/connection_config_dialog.h"
-#include "Views/Dialogs/batch_edit_dialog.h"
+#include "Views/Dialogs/group_editor_dialog.h"
 #include "Views/Dialogs/register_editor_dialog.h"
-#include "Views/Groups/group_panel_view.h"
+#include "Views/Groups/group_canvas_view.h"
+#include "Views/Groups/group_realtime_panel.h"
+#include "Views/Groups/group_register_config_dialog.h"
 #include "Views/Logging/event_log_view.h"
-#include "Views/Registers/register_config_view.h"
-#include "Views/RuntimeControl/runtime_control_view.h"
-#include "Views/RuntimeValues/runtime_value_view.h"
 #include "Views/Main/status_bar_view.h"
 
 #include <QCloseEvent>
 #include <QFileDialog>
-#include <QInputDialog>
-#include <QLineEdit>
+#include <QFrame>
+#include <QLabel>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPushButton>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QStatusBar>
-#include <QVBoxLayout>
+#include <QToolBar>
+#include <QToolButton>
+#include <QTimer>
+#include <QUuid>
 
 MainWindow::MainWindow(MainWindowViewModel *viewModel, QWidget *parent)
     : QMainWindow(parent),
@@ -31,8 +35,38 @@ MainWindow::MainWindow(MainWindowViewModel *viewModel, QWidget *parent)
     {
         m_viewModel = new MainWindowViewModel(this);
     }
-    buildWorkspace(); buildMenus(); connectActions(); refreshDocument();
-    resize(1440, 900); setMinimumWidth(1100); setWindowTitle(QStringLiteral("Modbus 配置工具"));
+    buildWorkspace();
+    buildMenus();
+    buildToolBar();
+    connectActions();
+    refreshDocument();
+    resize(1600, 900);
+    setMinimumSize(1200, 700);
+    setWindowTitle(QStringLiteral("Modbus 配置工具"));
+}
+
+void MainWindow::buildToolBar()
+{
+    m_workspaceToolBar = addToolBar(QStringLiteral("工作区"));
+    m_workspaceToolBar->setObjectName(QStringLiteral("workspaceToolBar"));
+    m_workspaceToolBar->setMovable(false);
+    m_workspaceToolBar->setFloatable(false);
+
+    m_groupCountBadge = new QLabel(m_workspaceToolBar);
+    m_groupCountBadge->setObjectName(QStringLiteral("groupCountBadge"));
+    m_groupCountBadge->setFixedHeight(32);
+    m_groupCountBadge->setAlignment(Qt::AlignCenter);
+    m_workspaceToolBar->addWidget(m_groupCountBadge);
+
+    QAction *addGroupAction = m_workspaceToolBar->addAction(QStringLiteral("＋ 新增分组"));
+    addGroupAction->setObjectName(QStringLiteral("addGroupToolAction"));
+    if (auto *addGroupButton = qobject_cast<QToolButton *>(
+            m_workspaceToolBar->widgetForAction(addGroupAction)))
+    {
+        addGroupButton->setObjectName(QStringLiteral("addGroupToolButton"));
+        addGroupButton->setFixedHeight(32);
+    }
+    connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
 }
 
 MainWindow::~MainWindow() = default;
@@ -40,141 +74,226 @@ MainWindow::~MainWindow() = default;
 void MainWindow::buildMenus()
 {
     QMenu *project = menuBar()->addMenu(QStringLiteral("项目"));
-    QAction *newAction = project->addAction(QStringLiteral("新建工程")); newAction->setObjectName(QStringLiteral("newProjectAction"));
-    QAction *openAction = project->addAction(QStringLiteral("打开工程")); openAction->setObjectName(QStringLiteral("openProjectAction"));
+    QAction *newAction = project->addAction(QStringLiteral("新建工程"));
+    newAction->setObjectName(QStringLiteral("newProjectAction"));
+    QAction *openAction = project->addAction(QStringLiteral("打开工程"));
+    openAction->setObjectName(QStringLiteral("openProjectAction"));
     m_recentMenu = project->addMenu(QStringLiteral("最近工程"));
     project->addSeparator();
-    QAction *saveAction = project->addAction(QStringLiteral("保存工程")); saveAction->setObjectName(QStringLiteral("saveProjectAction"));
+    QAction *saveAction = project->addAction(QStringLiteral("保存工程"));
+    saveAction->setObjectName(QStringLiteral("saveProjectAction"));
     QAction *saveAsAction = project->addAction(QStringLiteral("工程另存为"));
     project->addSeparator();
-    QAction *importCsvAction = project->addAction(QStringLiteral("导入寄存器 CSV"));
-    QAction *exportCsvAction = project->addAction(QStringLiteral("导出寄存器 CSV"));
-    project->addSeparator(); QAction *closeAction = project->addAction(QStringLiteral("关闭程序"));
+    QAction *closeAction = project->addAction(QStringLiteral("关闭程序"));
+
     QMenu *organization = menuBar()->addMenu(QStringLiteral("组织"));
     QAction *addGroupAction = organization->addAction(QStringLiteral("新增分组"));
-    QAction *removeGroupAction = organization->addAction(QStringLiteral("删除当前分组"));
-    QAction *connectionAction = menuBar()->addAction(QStringLiteral("连接配置"));
+
     connect(newAction, &QAction::triggered, this, &MainWindow::newProject);
     connect(openAction, &QAction::triggered, this, &MainWindow::openProject);
     connect(saveAction, &QAction::triggered, this, [this]() { saveProject(false); });
     connect(saveAsAction, &QAction::triggered, this, [this]() { saveProject(true); });
-    connect(importCsvAction, &QAction::triggered, this, [this]()
-    {
-        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("导入 CSV"), QString(), QStringLiteral("CSV 文件 (*.csv)"));
-        if (path.isEmpty()) { return; }
-        QMessageBox modeBox(QMessageBox::Question, QStringLiteral("CSV 导入模式"),
-                            QStringLiteral("请选择导入方式。"), QMessageBox::NoButton, this);
-        QPushButton *appendButton = modeBox.addButton(QStringLiteral("追加"), QMessageBox::AcceptRole);
-        QPushButton *replaceButton = modeBox.addButton(QStringLiteral("替换全部"), QMessageBox::DestructiveRole);
-        modeBox.addButton(QMessageBox::Cancel);
-        modeBox.exec();
-        if (modeBox.clickedButton() == appendButton)
-        {
-            showResult(m_viewModel->importCsv(path, false), QStringLiteral("CSV 已追加导入"));
-        }
-        else if (modeBox.clickedButton() == replaceButton)
-        {
-            showResult(m_viewModel->importCsv(path, true), QStringLiteral("CSV 已替换导入"));
-        }
-    });
-    connect(exportCsvAction, &QAction::triggered, this, [this]()
-    {
-        QString path = QFileDialog::getSaveFileName(this, QStringLiteral("导出 CSV"), QString(), QStringLiteral("CSV 文件 (*.csv)"));
-        if (path.isEmpty()) { return; } if (!path.endsWith(QStringLiteral(".csv"), Qt::CaseInsensitive)) { path += QStringLiteral(".csv"); }
-        showResult(m_viewModel->exportCsv(path), QStringLiteral("CSV 已导出"));
-    });
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
-    connect(removeGroupAction, &QAction::triggered, this, &MainWindow::removeGroup);
-    connect(connectionAction, &QAction::triggered, m_runtimeControl, &RuntimeControlView::configureRequested);
+
     rebuildRecentMenu();
 }
 
 void MainWindow::buildWorkspace()
 {
-    auto *central = new QWidget(this); auto *root = new QVBoxLayout(central);
-    root->setContentsMargins(14, 14, 14, 8); root->setSpacing(8);
-    m_runtimeControl = new RuntimeControlView(central);
-    auto *horizontal = new QSplitter(Qt::Horizontal, central);
-    m_groupPanel = new GroupPanelView(horizontal);
-    auto *vertical = new QSplitter(Qt::Vertical, horizontal);
-    m_registerView = new RegisterConfigView(vertical);
-    m_runtimeValueView = new RuntimeValueView(vertical);
-    horizontal->addWidget(m_groupPanel); horizontal->addWidget(vertical);
-    horizontal->setSizes({260, 1100}); vertical->setSizes({420, 270});
-    m_logView = new EventLogView(central); m_logView->setMaximumHeight(170);
-    root->addWidget(m_runtimeControl); root->addWidget(horizontal, 1); root->addWidget(m_logView);
-    setCentralWidget(central);
-    m_statusView = new StatusBarView(this); statusBar()->addPermanentWidget(m_statusView, 1);
+    m_workspaceSplitter = new QSplitter(Qt::Horizontal, this);
+    m_workspaceSplitter->setObjectName(QStringLiteral("workspaceSplitter"));
+    m_workspaceSplitter->setChildrenCollapsible(false);
+
+    m_portListView = new ConnectionPortListView(m_workspaceSplitter);
+    m_portListView->setMinimumWidth(220);
+    m_portListView->setMaximumWidth(360);
+
+    m_canvasView = new GroupCanvasView(m_workspaceSplitter);
+    auto *canvasScrollArea = new QScrollArea(m_workspaceSplitter);
+    canvasScrollArea->setObjectName(QStringLiteral("groupCanvasScrollArea"));
+    canvasScrollArea->setWidgetResizable(true);
+    canvasScrollArea->setFrameShape(QFrame::NoFrame);
+    canvasScrollArea->setWidget(m_canvasView);
+
+    m_logView = new EventLogView(m_workspaceSplitter);
+    m_logView->setMinimumWidth(260);
+    m_logView->setMaximumWidth(420);
+
+    m_workspaceSplitter->addWidget(m_portListView);
+    m_workspaceSplitter->addWidget(canvasScrollArea);
+    m_workspaceSplitter->addWidget(m_logView);
+    m_workspaceSplitter->setStretchFactor(0, 0);
+    m_workspaceSplitter->setStretchFactor(1, 1);
+    m_workspaceSplitter->setStretchFactor(2, 0);
+    m_workspaceSplitter->setSizes(QList<int>() << 250 << 1050 << 300);
+
+    setCentralWidget(m_workspaceSplitter);
+
+    m_statusView = new StatusBarView(this);
+    statusBar()->addPermanentWidget(m_statusView, 1);
 }
 
 void MainWindow::connectActions()
 {
-    connect(m_viewModel, &MainWindowViewModel::documentChanged, this, &MainWindow::refreshDocument);
-    connect(m_viewModel, &MainWindowViewModel::dirtyChanged, this, [this](bool) { refreshDocument(); });
-    connect(m_viewModel, &MainWindowViewModel::recentFilesChanged,
-            this, &MainWindow::rebuildRecentMenu);
-    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged,
-            m_registerView, &RegisterConfigView::refreshPoint);
-    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged,
-            m_runtimeValueView, &RuntimeValueView::queuePointRefresh);
-    connect(m_runtimeValueView, &RuntimeValueView::locateRequested,
-            m_registerView, &RegisterConfigView::selectPoint);
-    connect(m_groupPanel, &GroupPanelView::groupSelected, this, [this](const QString &, const QString &name)
+    // ViewModel signals
+    connect(m_viewModel, &MainWindowViewModel::documentChanged,
+            this, &MainWindow::scheduleRefresh);
+    connect(m_viewModel, &MainWindowViewModel::dirtyChanged,
+            this, [this](bool) { refreshStatus(); });
+    connect(m_viewModel, &MainWindowViewModel::recentFilesChanged, this, &MainWindow::rebuildRecentMenu);
+
+    connect(m_viewModel, &MainWindowViewModel::runtimeStateChanged, this,
+            [this](const QString &portId, RuntimeState state)
     {
-        const QString filter = name == QStringLiteral("全部分组") ? QString() : name;
-        m_registerView->setGroupFilter(filter); m_runtimeValueView->setGroupFilter(filter);
+        m_portStates.insert(portId, state);
+        m_portListView->updatePortState(portId, state);
+        m_logView->appendMessage(QStringLiteral("RUNTIME"), QStringLiteral("MODBUS"),
+                                 QStringLiteral("端口 %1: %2").arg(portId, runtimeStateToString(state)));
     });
-    connect(m_groupPanel, &GroupPanelView::addRequested, this, &MainWindow::addGroup);
-    connect(m_groupPanel, &GroupPanelView::removeRequested, this, &MainWindow::removeGroup);
-    connect(m_groupPanel, &GroupPanelView::batchEditRequested, this, [this]()
+
+    connect(m_viewModel, &MainWindowViewModel::runtimeError, this,
+            [this](const QString &portId, const QString &message, const QString &detail)
     {
-        const QStringList ids = m_registerView->selectedPointIds();
-        if (ids.isEmpty()) { QMessageBox::information(this, QStringLiteral("批量编辑"), QStringLiteral("请先在配置表中选择寄存器。")); return; }
-        BatchEditDialog dialog(ids.size(), m_viewModel->document().groups, this);
-        if (dialog.exec() == QDialog::Accepted) { showResult(m_viewModel->applyRegisterPatch(ids, dialog.patch()), QStringLiteral("批量编辑已应用")); }
+        m_logView->appendMessage(QStringLiteral("ERROR"), QStringLiteral("MODBUS"),
+                                 QStringLiteral("端口 %1: %2 - %3").arg(portId, message, detail));
+        QMessageBox::critical(this, QStringLiteral("运行时错误"),
+                              QStringLiteral("端口 %1\n%2\n%3").arg(portId, message, detail));
     });
-    connect(m_registerView, &RegisterConfigView::addRequested, this, &MainWindow::addRegister);
-    connect(m_registerView, &RegisterConfigView::editRequested, this, &MainWindow::editRegister);
-    connect(m_registerView, &RegisterConfigView::deleteRequested, this, [this](const QStringList &ids)
+
+    // Port list view signals
+    connect(m_portListView, &ConnectionPortListView::addPortRequested, this, &MainWindow::addPort);
+    connect(m_portListView, &ConnectionPortListView::editPortRequested, this, &MainWindow::editPort);
+    connect(m_portListView, &ConnectionPortListView::removePortRequested, this, &MainWindow::removePort);
+    connect(m_portListView, &ConnectionPortListView::startPortRequested,
+            this, &MainWindow::startPort);
+    connect(m_portListView, &ConnectionPortListView::stopPortRequested,
+            this, &MainWindow::stopPort);
+
+    // Canvas view signals
+    connect(m_canvasView, &GroupCanvasView::groupMoved, this,
+            [this](const QString &groupId, int x, int y)
     {
-        if (ids.isEmpty()) { return; }
-        if (QMessageBox::question(this, QStringLiteral("删除寄存器"), QStringLiteral("确定删除选中的 %1 条寄存器？").arg(ids.size())) == QMessageBox::Yes)
-        { showResult(m_viewModel->removeRegisters(ids), QStringLiteral("寄存器已删除")); }
-    });
-    connect(m_registerView, &RegisterConfigView::enableRequested, this, [this](const QStringList &ids, bool enabled)
-    { showResult(m_viewModel->setRegistersEnabled(ids, enabled), enabled ? QStringLiteral("寄存器已启用") : QStringLiteral("寄存器已停用")); });
-    connect(m_runtimeControl, &RuntimeControlView::configureRequested, this, [this]()
-    {
-        ConnectionConfigDialog dialog(m_viewModel->document().serverProfile, this);
-        if (dialog.exec() == QDialog::Accepted)
+        const OperationResult result = m_viewModel->moveGroup(groupId, x, y);
+        if (!result.success)
         {
-            showResult(m_viewModel->updateProfile(dialog.profile()), QStringLiteral("连接配置已更新"));
+            m_logView->appendMessage(QStringLiteral("WARNING"), QStringLiteral("APP"), result.message);
+            scheduleRefresh();
         }
     });
-    connect(m_runtimeControl, &RuntimeControlView::startRequested, m_viewModel, &MainWindowViewModel::startRuntime);
-    connect(m_runtimeControl, &RuntimeControlView::stopRequested, m_viewModel, &MainWindowViewModel::stopRuntime);
-    connect(m_viewModel, &MainWindowViewModel::runtimeStateChanged, this, [this](RuntimeState state)
+
+    connect(m_canvasView, &GroupCanvasView::groupSelected, this,
+            [this](const QString &groupId)
     {
-        m_runtimeControl->setRuntimeState(state); refreshDocument();
-        m_registerView->setMappingEditingEnabled(state == RuntimeState::Idle
-                                                  || state == RuntimeState::Fault);
-        m_groupPanel->setEditingEnabled(state == RuntimeState::Idle
-                                        || state == RuntimeState::Fault);
-        m_logView->appendMessage(QStringLiteral("RUNTIME"), QStringLiteral("MODBUS"), runtimeStateToString(state));
+        m_selectedGroupId = groupId;
+        m_canvasView->setSelectedGroup(groupId);
     });
-    connect(m_viewModel, &MainWindowViewModel::runtimeError, this, [this](const QString &message, const QString &detail)
-    { m_logView->appendMessage(QStringLiteral("ERROR"), QStringLiteral("MODBUS"), message + QStringLiteral(": ") + detail); QMessageBox::critical(this, QStringLiteral("运行时错误"), message); });
+
+    connect(m_canvasView, &GroupCanvasView::groupEnabledChangeRequested, this,
+            [this](const QString &groupId, bool enabled)
+    {
+        m_selectedGroupId = groupId;
+        showResult(m_viewModel->setGroupEnabled(groupId, enabled),
+                   enabled ? QStringLiteral("分组已启用") : QStringLiteral("分组已停用"));
+    });
+
+    connect(m_canvasView, &GroupCanvasView::groupPortChangeRequested, this,
+            [this](const QString &groupId, const QString &portId)
+    {
+        m_selectedGroupId = groupId;
+        const OperationResult result = m_viewModel->setGroupPort(groupId, portId);
+        showResult(result,
+                   portId.isEmpty() ? QStringLiteral("分组已解除端口绑定")
+                                    : QStringLiteral("分组端口已更新"));
+        if (!result.success)
+        {
+            scheduleRefresh();
+        }
+    });
+
+    connect(m_canvasView, &GroupCanvasView::groupDoubleClicked, this, &MainWindow::showGroupRealtime);
+
+    connect(m_canvasView, &GroupCanvasView::groupContextMenuRequested, this,
+            [this](const QString &groupId, const QPoint &globalPos)
+    {
+        m_selectedGroupId = groupId;
+        QMenu menu(this);
+        menu.addAction(QStringLiteral("寄存器配置"), this, [this, groupId]() { showGroupConfig(groupId); });
+        menu.addAction(QStringLiteral("查看实时数值"), this, [this, groupId]() { showGroupRealtime(groupId); });
+        menu.addSeparator();
+        menu.addAction(QStringLiteral("导入 CSV"), this, [this, groupId]() { importGroupCsv(groupId); });
+        menu.addAction(QStringLiteral("导出 CSV"), this, [this, groupId]() { exportGroupCsv(groupId); });
+        menu.addSeparator();
+        menu.addAction(QStringLiteral("编辑分组"), this, [this, groupId]() { editGroup(groupId); });
+        QAction *delAction = menu.addAction(QStringLiteral("删除分组"), this, [this, groupId]() { removeGroup(groupId); });
+        for (const RegisterGroup &group : m_viewModel->document().groups)
+        {
+            if (group.id == groupId)
+            {
+                delAction->setEnabled(!group.isDefault);
+                break;
+            }
+        }
+        menu.exec(globalPos);
+    });
+
+    connect(m_canvasView, &GroupCanvasView::canvasClicked, this, [this]()
+    {
+        m_selectedGroupId.clear();
+        m_canvasView->setSelectedGroup(QString());
+    });
+    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged, this,
+            [this](const QString &pointId)
+    {
+        m_canvasView->updateRuntimeValue(m_viewModel->document(), pointId);
+    });
+}
+
+void MainWindow::scheduleRefresh()
+{
+    if (m_refreshScheduled)
+    {
+        return;
+    }
+    m_refreshScheduled = true;
+    QTimer::singleShot(0, this, [this]()
+    {
+        m_refreshScheduled = false;
+        refreshDocument();
+    });
 }
 
 void MainWindow::refreshDocument()
 {
     const ProjectDocument &document = m_viewModel->document();
-    m_groupPanel->setGroups(document.groups, document.registers);
-    m_registerView->setDocument(&document); m_runtimeValueView->setDocument(&document);
-    m_runtimeControl->setProfile(document.serverProfile); m_runtimeControl->setDirty(m_viewModel->isDirty());
-    m_statusView->updateStatus(document, m_viewModel->isDirty(), m_viewModel->runtimeState());
-    setWindowTitle(QStringLiteral("%1%2 - Modbus 配置工具").arg(document.project.name, m_viewModel->isDirty() ? QStringLiteral(" *") : QString()));
+    for (const ConnectionPort &port : document.ports)
+    {
+        m_portStates.insert(port.id, m_viewModel->portState(port.id));
+    }
+    m_portListView->setModel(document.ports, document.groups, m_portStates);
+    m_canvasView->setModel(document);
+    updateGroupCount(document.groups.size());
+    if (!m_selectedGroupId.isEmpty())
+    {
+        m_canvasView->setSelectedGroup(m_selectedGroupId);
+    }
+    refreshStatus();
+}
+
+void MainWindow::refreshStatus()
+{
+    const ProjectDocument &document = m_viewModel->document();
+    m_statusView->updateStatus(document, m_viewModel->isDirty(), RuntimeState::Idle);
+    setWindowTitle(QStringLiteral("%1%2 - Modbus 配置工具")
+                   .arg(document.project.name, m_viewModel->isDirty() ? QStringLiteral(" *") : QString()));
+}
+
+void MainWindow::updateGroupCount(int count)
+{
+    if (m_groupCountBadge)
+    {
+        m_groupCountBadge->setText(QStringLiteral("%1 分组").arg(count));
+    }
 }
 
 bool MainWindow::confirmDiscardChanges()
@@ -205,39 +324,199 @@ bool MainWindow::saveProject(bool saveAs)
 
 void MainWindow::addGroup()
 {
-    bool accepted = false; const QString name = QInputDialog::getText(this, QStringLiteral("新增分组"), QStringLiteral("分组名称"), QLineEdit::Normal, QString(), &accepted);
-    if (accepted) { showResult(m_viewModel->addGroup(name), QStringLiteral("分组已新增")); }
+    RegisterGroup group;
+    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    group.color = QStringLiteral("#f54e00");
+    group.enabled = true;
+    group.canvasX = 40;
+    group.canvasY = 40;
+
+    GroupEditorDialog dialog(group, this);
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        showResult(m_viewModel->addGroup(dialog.group()), QStringLiteral("分组已新增"));
+    }
 }
 
-void MainWindow::removeGroup()
+void MainWindow::addPort()
 {
-    const QString id = m_groupPanel->selectedGroupId(); if (id.isEmpty()) { return; }
-    if (QMessageBox::question(this, QStringLiteral("删除分组"), QStringLiteral("删除分组并将其中寄存器移动到默认分组？")) == QMessageBox::Yes)
-    { showResult(m_viewModel->removeGroup(id, false), QStringLiteral("分组已删除")); }
+    ConnectionPort port = m_viewModel->makeDefaultPort();
+    ConnectionConfigDialog dialog(port, this);
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        showResult(m_viewModel->addPort(dialog.port()), QStringLiteral("端口已新增"));
+    }
 }
 
-void MainWindow::addRegister()
+void MainWindow::editPort(const QString &portId)
 {
-    QString groupId = m_groupPanel->selectedGroupId(); if (groupId.isEmpty()) { groupId = m_viewModel->document().groups.first().id; }
+    const ProjectDocument &doc = m_viewModel->document();
+    for (const ConnectionPort &port : doc.ports)
+    {
+        if (port.id == portId)
+        {
+            ConnectionConfigDialog dialog(port, this);
+            if (dialog.exec() == QDialog::Accepted)
+            {
+                showResult(m_viewModel->updatePort(dialog.port()), QStringLiteral("端口已更新"));
+            }
+            return;
+        }
+    }
+}
+
+void MainWindow::removePort(const QString &portId)
+{
+    int bindings = 0;
+    for (const RegisterGroup &group : m_viewModel->document().groups)
+    {
+        if (group.portId == portId)
+        {
+            ++bindings;
+        }
+    }
+    const QString message = bindings > 0
+        ? QStringLiteral("该端口已绑定 %1 个分组。删除后这些分组将解除绑定，确定继续？")
+              .arg(bindings)
+        : QStringLiteral("确定删除该端口？");
+    if (QMessageBox::question(this, QStringLiteral("删除端口"),
+                              message)
+        == QMessageBox::Yes)
+    {
+        showResult(m_viewModel->removePort(portId), QStringLiteral("端口已删除"));
+    }
+}
+
+void MainWindow::startPort(const QString &portId)
+{
+    m_viewModel->startPort(portId);
+}
+
+void MainWindow::stopPort(const QString &portId)
+{
+    m_viewModel->stopPort(portId);
+}
+
+void MainWindow::showGroupRealtime(const QString &groupId)
+{
+    auto *panel = new GroupRealtimePanel(groupId, m_viewModel->document(), this);
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    connect(panel, &GroupRealtimePanel::configureRegistersRequested, this, &MainWindow::showGroupConfig);
+    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged, panel, [panel, this](const QString &)
+    {
+        panel->updateValues(m_viewModel->document());
+    });
+    panel->show();
+}
+
+void MainWindow::showGroupConfig(const QString &groupId)
+{
+    auto *dialog = new GroupRegisterConfigDialog(groupId, m_viewModel->document(), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &GroupRegisterConfigDialog::addRegisterRequested, this, &MainWindow::addRegisterToGroup);
+    connect(dialog, &GroupRegisterConfigDialog::editRegisterRequested, this, &MainWindow::editRegister);
+    connect(dialog, &GroupRegisterConfigDialog::removeRegistersRequested, this, &MainWindow::removeRegisters);
+    connect(dialog, &GroupRegisterConfigDialog::importCsvRequested, this, &MainWindow::importGroupCsv);
+    connect(dialog, &GroupRegisterConfigDialog::exportCsvRequested, this, &MainWindow::exportGroupCsv);
+    connect(m_viewModel, &MainWindowViewModel::documentChanged, dialog, [this, dialog]()
+    {
+        dialog->setDocument(m_viewModel->document());
+    });
+    dialog->show();
+}
+
+void MainWindow::editGroup(const QString &groupId)
+{
+    const ProjectDocument &doc = m_viewModel->document();
+    for (const RegisterGroup &group : doc.groups)
+    {
+        if (group.id == groupId)
+        {
+            GroupEditorDialog dialog(group, this);
+            if (dialog.exec() == QDialog::Accepted)
+            {
+                showResult(m_viewModel->updateGroup(dialog.group()), QStringLiteral("分组已更新"));
+            }
+            return;
+        }
+    }
+}
+
+void MainWindow::removeGroup(const QString &groupId)
+{
+    if (QMessageBox::question(this, QStringLiteral("删除分组"),
+                              QStringLiteral("删除分组并将其中寄存器移动到默认分组？"))
+        == QMessageBox::Yes)
+    {
+        showResult(m_viewModel->removeGroup(groupId, false), QStringLiteral("分组已删除"));
+    }
+}
+
+void MainWindow::importGroupCsv(const QString &groupId)
+{
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("导入 CSV"),
+                                                      QString(), QStringLiteral("CSV 文件 (*.csv)"));
+    if (path.isEmpty()) return;
+
+    const bool replaceGroup = QMessageBox::question(this, QStringLiteral("导入模式"),
+                                                    QStringLiteral("是否替换分组中的现有寄存器？\n\n"
+                                                                   "「是」= 清空后导入\n"
+                                                                   "「否」= 追加到现有寄存器"))
+                              == QMessageBox::Yes;
+
+    showResult(m_viewModel->importCsvIntoGroup(groupId, path, replaceGroup), QStringLiteral("CSV 已导入"));
+}
+
+void MainWindow::exportGroupCsv(const QString &groupId)
+{
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("导出 CSV"),
+                                                      QString(), QStringLiteral("CSV 文件 (*.csv)"));
+    if (path.isEmpty()) return;
+
+    showResult(m_viewModel->exportGroupCsv(groupId, path), QStringLiteral("CSV 已导出"));
+}
+
+void MainWindow::addRegisterToGroup(const QString &groupId)
+{
     RegisterPoint point = ProjectFactory::createRegister(groupId, m_viewModel->nextAddress(groupId));
     RegisterEditorDialog dialog(point, m_viewModel->document().groups, this);
-    if (dialog.exec() == QDialog::Accepted) { showResult(m_viewModel->addRegister(dialog.point()), QStringLiteral("寄存器已新增")); }
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        showResult(m_viewModel->addRegister(dialog.point()), QStringLiteral("寄存器已新增"));
+    }
 }
 
-void MainWindow::editRegister(const QString &pointId)
+void MainWindow::editRegister(const QString &registerId)
 {
-    if (pointId.isEmpty()) { return; }
-    for (const RegisterPoint &point : m_viewModel->document().registers)
+    const ProjectDocument &doc = m_viewModel->document();
+    for (const RegisterPoint &point : doc.registers)
     {
-        if (point.id != pointId) { continue; }
-        RegisterEditorDialog dialog(point, m_viewModel->document().groups, this);
-        connect(&dialog, &RegisterEditorDialog::manualWriteRequested,
-                this, [this, pointId](const RegisterValue &value)
+        if (point.id == registerId)
         {
-            m_viewModel->writePoint(pointId, value);
-        });
-        if (dialog.exec() == QDialog::Accepted) { showResult(m_viewModel->updateRegister(dialog.point()), QStringLiteral("寄存器已更新")); }
-        return;
+            RegisterEditorDialog dialog(point, doc.groups, this);
+            connect(&dialog, &RegisterEditorDialog::manualWriteRequested, this,
+                    [this, registerId](const RegisterValue &value)
+            {
+                m_viewModel->writePoint(registerId, value);
+            });
+            if (dialog.exec() == QDialog::Accepted)
+            {
+                showResult(m_viewModel->updateRegister(dialog.point()), QStringLiteral("寄存器已更新"));
+            }
+            return;
+        }
+    }
+}
+
+void MainWindow::removeRegisters(const QStringList &registerIds)
+{
+    if (registerIds.isEmpty()) return;
+
+    if (QMessageBox::question(this, QStringLiteral("删除寄存器"),
+                              QStringLiteral("确定删除选中的 %1 条寄存器？").arg(registerIds.size()))
+        == QMessageBox::Yes)
+    {
+        showResult(m_viewModel->removeRegisters(registerIds), QStringLiteral("寄存器已删除"));
     }
 }
 
@@ -281,6 +560,11 @@ void MainWindow::rebuildRecentMenu()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    if (!confirmDiscardChanges()) { event->ignore(); return; }
-    m_viewModel->stopRuntime(); event->accept();
+    if (!confirmDiscardChanges())
+    {
+        event->ignore();
+        return;
+    }
+    m_viewModel->stopAllPorts();
+    event->accept();
 }

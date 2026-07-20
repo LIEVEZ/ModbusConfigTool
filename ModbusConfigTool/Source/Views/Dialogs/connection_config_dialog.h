@@ -1,7 +1,7 @@
 #ifndef CONNECTION_CONFIG_DIALOG_H
 #define CONNECTION_CONFIG_DIALOG_H
 
-#include "Domain/Models/server_profile.h"
+#include "Domain/Models/connection_port.h"
 
 #include <QDialog>
 
@@ -15,10 +15,11 @@ class ConnectionConfigDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit ConnectionConfigDialog(const ServerProfile &profile, QWidget *parent = nullptr);
-    ServerProfile profile() const;
+    explicit ConnectionConfigDialog(const ConnectionPort &port, QWidget *parent = nullptr);
+    ConnectionPort port() const;
 
 private:
+    QLineEdit *m_portName = nullptr;
     QComboBox *m_type = nullptr;
     QStackedWidget *m_pages = nullptr;
     QLineEdit *m_host = nullptr;
@@ -28,6 +29,7 @@ private:
     QComboBox *m_parity = nullptr;
     QSpinBox *m_pollInterval = nullptr;
     QSpinBox *m_slaveAddress = nullptr;
+    QString m_originalId;
 };
 
 #endif

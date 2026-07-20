@@ -2,6 +2,7 @@
 
 #include "Application/Project/project_service.h"
 #include "Application/Registers/register_service.h"
+#include "Application/Connections/connection_service.h"
 #include "Application/Runtime/runtime_service.h"
 #include "Infrastructure/Persistence/csv_register_gateway_impl.h"
 #include "Infrastructure/Persistence/json_project_repository.h"
@@ -13,6 +14,7 @@ MainWindowViewModel::MainWindowViewModel(QObject *parent) : QObject(parent)
     m_csvGateway = new CsvRegisterGatewayImpl;
     m_projectService = new ProjectService(m_repository, this);
     m_registerService = new RegisterService(m_projectService);
+    m_connectionService = new ConnectionService(m_projectService);
     m_runtimeService = new RuntimeService(this);
     connect(m_projectService, &ProjectService::documentChanged,
             this, &MainWindowViewModel::documentChanged);
@@ -22,9 +24,9 @@ MainWindowViewModel::MainWindowViewModel(QObject *parent) : QObject(parent)
             this, &MainWindowViewModel::recentFilesChanged);
     connect(m_projectService, &ProjectService::runtimeValueChanged,
             this, &MainWindowViewModel::runtimeValueChanged);
-    connect(m_runtimeService, &RuntimeService::stateChanged,
+    connect(m_runtimeService, &RuntimeService::portStateChanged,
             this, &MainWindowViewModel::runtimeStateChanged);
-    connect(m_runtimeService, &RuntimeService::errorOccurred,
+    connect(m_runtimeService, &RuntimeService::portError,
             this, &MainWindowViewModel::runtimeError);
     connect(m_runtimeService, &RuntimeService::valueChanged,
             m_projectService, &ProjectService::updateRuntimeValue);
@@ -33,6 +35,7 @@ MainWindowViewModel::MainWindowViewModel(QObject *parent) : QObject(parent)
 MainWindowViewModel::~MainWindowViewModel()
 {
     delete m_registerService;
+    delete m_connectionService;
     delete m_csvGateway;
     delete m_repository;
 }
@@ -42,58 +45,67 @@ QString MainWindowViewModel::filePath() const { return m_projectService->filePat
 bool MainWindowViewModel::isDirty() const { return m_projectService->isDirty(); }
 QStringList MainWindowViewModel::recentFiles() const { return m_projectService->recentFiles(); }
 void MainWindowViewModel::removeRecentFile(const QString &path) { m_projectService->removeRecentFile(path); }
-RuntimeState MainWindowViewModel::runtimeState() const { return m_runtimeService->state(); }
+RuntimeState MainWindowViewModel::portState(const QString &portId) const { return m_runtimeService->portState(portId); }
 void MainWindowViewModel::newProject() { m_projectService->newProject(); }
 OperationResult MainWindowViewModel::openProject(const QString &path) { return m_projectService->open(path); }
 OperationResult MainWindowViewModel::saveProject(const QString &path) { return m_projectService->saveAs(path); }
 
-OperationResult MainWindowViewModel::importCsv(const QString &path,
-                                               bool replaceRegisters)
-{
-    const CsvImportResult imported = m_csvGateway->importFile(path, document());
-    if (!imported.result.success) { return imported.result; }
-    ProjectDocument &target = m_projectService->editableDocument();
-    target.groups = imported.groups;
-    target.registers = replaceRegisters ? imported.registers
-                                        : target.registers + imported.registers;
-    m_projectService->markDirty();
-    return OperationResult::ok();
-}
+// 端口
+ConnectionPort MainWindowViewModel::makeDefaultPort() const { return m_connectionService->makeDefaultPort(); }
+OperationResult MainWindowViewModel::addPort(const ConnectionPort &port) { return m_connectionService->addPort(port); }
+OperationResult MainWindowViewModel::updatePort(const ConnectionPort &port) { return m_connectionService->updatePort(port); }
+OperationResult MainWindowViewModel::removePort(const QString &portId) { return m_connectionService->removePort(portId); }
 
-OperationResult MainWindowViewModel::exportCsv(const QString &path) const
-{
-    return m_csvGateway->exportFile(path, document());
-}
-
-OperationResult MainWindowViewModel::updateProfile(const ServerProfile &profile)
-{
-    m_projectService->editableDocument().serverProfile = profile;
-    m_projectService->markDirty();
-    return OperationResult::ok();
-}
-
-OperationResult MainWindowViewModel::addGroup(const QString &name) { return m_registerService->addGroup(name); }
-OperationResult MainWindowViewModel::removeGroup(const QString &id, bool removePoints) { return m_registerService->removeGroup(id, removePoints); }
-quint16 MainWindowViewModel::nextAddress(const QString &id) const { return m_registerService->nextAddress(id); }
-OperationResult MainWindowViewModel::addRegister(const RegisterPoint &point) { return m_registerService->addRegister(point); }
-OperationResult MainWindowViewModel::updateRegister(const RegisterPoint &point) { return m_registerService->updateRegister(point); }
-OperationResult MainWindowViewModel::removeRegisters(const QStringList &ids) { return m_registerService->removeRegisters(ids); }
-OperationResult MainWindowViewModel::setRegistersEnabled(const QStringList &ids, bool enabled) { return m_registerService->setEnabled(ids, enabled); }
-OperationResult MainWindowViewModel::applyRegisterPatch(const QStringList &ids, const RegisterPatch &patch) { return m_registerService->applyPatch(ids, patch); }
-void MainWindowViewModel::startRuntime()
+void MainWindowViewModel::startPort(const QString &portId)
 {
     const OperationResult validation = ValidationService::validateProject(document());
     if (!validation.success)
     {
-        emit runtimeError(validation.message, validation.detail);
+        emit runtimeError(portId, validation.message, validation.detail);
         return;
     }
-    m_runtimeService->start(document());
+    m_runtimeService->startPort(document(), portId);
 }
-void MainWindowViewModel::stopRuntime() { m_runtimeService->stop(); }
+void MainWindowViewModel::stopPort(const QString &portId) { m_runtimeService->stopPort(portId); }
+void MainWindowViewModel::stopAllPorts() { m_runtimeService->stopAll(); }
+
+// 分组
+OperationResult MainWindowViewModel::addGroup(const RegisterGroup &group) { return m_registerService->addGroup(group); }
+OperationResult MainWindowViewModel::updateGroup(const RegisterGroup &group) { return m_registerService->updateGroup(group); }
+OperationResult MainWindowViewModel::setGroupEnabled(const QString &groupId, bool enabled) { return m_registerService->setGroupEnabled(groupId, enabled); }
+OperationResult MainWindowViewModel::setGroupPort(const QString &groupId, const QString &portId) { return m_registerService->setGroupPort(groupId, portId); }
+OperationResult MainWindowViewModel::moveGroup(const QString &groupId, int x, int y) { return m_registerService->moveGroup(groupId, x, y); }
+OperationResult MainWindowViewModel::removeGroup(const QString &groupId, bool removePoints) { return m_registerService->removeGroup(groupId, removePoints); }
+
+// 分组内寄存器 / CSV
+quint16 MainWindowViewModel::nextAddress(const QString &groupId) const { return m_registerService->nextAddress(groupId); }
+OperationResult MainWindowViewModel::addRegister(const RegisterPoint &point) { return m_registerService->addRegister(point); }
+OperationResult MainWindowViewModel::updateRegister(const RegisterPoint &point) { return m_registerService->updateRegister(point); }
+OperationResult MainWindowViewModel::removeRegisters(const QStringList &ids) { return m_registerService->removeRegisters(ids); }
+
+OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId, const QString &path, bool replaceGroup)
+{
+    const CsvImportResult imported = m_csvGateway->importFile(path, document());
+    if (!imported.result.success) { return imported.result; }
+    return m_registerService->importCsvIntoGroup(groupId, imported, replaceGroup);
+}
+
+OperationResult MainWindowViewModel::exportGroupCsv(const QString &groupId, const QString &path) const
+{
+    ProjectDocument subset = document();
+    for (int i = subset.registers.size() - 1; i >= 0; --i)
+    {
+        if (subset.registers.at(i).groupId != groupId) { subset.registers.removeAt(i); }
+    }
+    return m_csvGateway->exportFile(path, subset);
+}
+
+// 寄存器批量操作
+OperationResult MainWindowViewModel::setRegistersEnabled(const QStringList &ids, bool enabled) { return m_registerService->setEnabled(ids, enabled); }
+OperationResult MainWindowViewModel::applyRegisterPatch(const QStringList &ids, const RegisterPatch &patch) { return m_registerService->applyPatch(ids, patch); }
 
 void MainWindowViewModel::writePoint(const QString &pointId, const RegisterValue &value)
 {
-    if (runtimeState() == RuntimeState::Running) { m_runtimeService->writePoint(pointId, value); }
-    else { m_projectService->updateRuntimeValue(pointId, value); m_projectService->markDirty(); }
+    m_projectService->updateRuntimeValue(pointId, value);
+    m_projectService->markDirty();
 }

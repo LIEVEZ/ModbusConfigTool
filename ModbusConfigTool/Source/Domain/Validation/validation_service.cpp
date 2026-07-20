@@ -106,8 +106,26 @@ OperationResult ValidationService::validateRegister(const RegisterPoint &point)
 
 OperationResult ValidationService::validateProject(const ProjectDocument &document)
 {
-    OperationResult result = validateServerProfile(document.serverProfile);
-    if (!result.success) { return result; }
+    OperationResult result;
+    QSet<QString> portIds;
+    for (const ConnectionPort &port : document.ports)
+    {
+        if (port.id.isEmpty() || port.name.trimmed().isEmpty())
+        {
+            return OperationResult::fail(QStringLiteral("invalid_port"),
+                                         QStringLiteral("ports"),
+                                         QStringLiteral("端口 ID 和名称不能为空"));
+        }
+        if (portIds.contains(port.id))
+        {
+            return OperationResult::fail(QStringLiteral("duplicate_port"),
+                                         QStringLiteral("ports"),
+                                         QStringLiteral("端口 ID 重复"));
+        }
+        portIds.insert(port.id);
+        result = validateServerProfile(port.profile);
+        if (!result.success) { return result; }
+    }
 
     QSet<QString> groupIds;
     QSet<QString> groupNames;
@@ -127,6 +145,18 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
         }
         groupIds.insert(group.id);
         groupNames.insert(group.name.trimmed());
+        if (!group.portId.isEmpty() && !portIds.contains(group.portId))
+        {
+            return OperationResult::fail(QStringLiteral("missing_port"),
+                                         QStringLiteral("portId"),
+                                         QStringLiteral("分组绑定的端口不存在"));
+        }
+        if (group.canvasX < 0 || group.canvasY < 0)
+        {
+            return OperationResult::fail(QStringLiteral("invalid_canvas_coord"),
+                                         QStringLiteral("canvas"),
+                                         QStringLiteral("分组画布坐标不能为负"));
+        }
     }
 
     QSet<QString> protocolKeys;

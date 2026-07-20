@@ -1,5 +1,6 @@
 #include "json_project_repository.h"
 
+#include "Domain/Models/connection_port.h"
 #include "Domain/Models/project_factory.h"
 #include "Domain/Validation/validation_service.h"
 
@@ -8,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QUuid>
 
 namespace
 {
@@ -100,6 +102,52 @@ RegisterPoint pointFromJson(const QJsonObject &object)
     point.strategy.parameters = strategy.value(QStringLiteral("params")).toObject().toVariantMap();
     return point;
 }
+
+QJsonObject portToJson(const ConnectionPort &port)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), port.id);
+    object.insert(QStringLiteral("name"), port.name);
+    object.insert(QStringLiteral("connectionType"),
+                  port.profile.connectionType == ConnectionType::Tcp ? QStringLiteral("TCP") : QStringLiteral("RTU"));
+    object.insert(QStringLiteral("tcpHost"), port.profile.tcpHost);
+    object.insert(QStringLiteral("tcpPort"), int(port.profile.tcpPort));
+    object.insert(QStringLiteral("serialPort"), port.profile.serialPort);
+    object.insert(QStringLiteral("baudRate"), port.profile.baudRate);
+    object.insert(QStringLiteral("parity"), QString(port.profile.parity));
+    object.insert(QStringLiteral("dataBits"), port.profile.dataBits);
+    object.insert(QStringLiteral("stopBits"), port.profile.stopBits);
+    object.insert(QStringLiteral("pollIntervalMs"), port.profile.pollIntervalMs);
+    object.insert(QStringLiteral("slaveAddress"), int(port.profile.slaveAddress));
+    return object;
+}
+
+ServerProfile profileFromJson(const QJsonObject &object)
+{
+    ServerProfile profile;
+    profile.connectionType = object.value(QStringLiteral("connectionType")).toString() == QStringLiteral("RTU")
+                             ? ConnectionType::Rtu : ConnectionType::Tcp;
+    profile.tcpHost = object.value(QStringLiteral("tcpHost")).toString(QStringLiteral("127.0.0.1"));
+    profile.tcpPort = quint16(object.value(QStringLiteral("tcpPort")).toInt(5020));
+    profile.serialPort = object.value(QStringLiteral("serialPort")).toString();
+    profile.baudRate = object.value(QStringLiteral("baudRate")).toInt(9600);
+    const QString parity = object.value(QStringLiteral("parity")).toString(QStringLiteral("N"));
+    profile.parity = parity.isEmpty() ? QLatin1Char('N') : parity.at(0);
+    profile.dataBits = object.value(QStringLiteral("dataBits")).toInt(8);
+    profile.stopBits = object.value(QStringLiteral("stopBits")).toInt(1);
+    profile.pollIntervalMs = object.value(QStringLiteral("pollIntervalMs")).toInt(1000);
+    profile.slaveAddress = quint8(object.value(QStringLiteral("slaveAddress")).toInt(1));
+    return profile;
+}
+
+ConnectionPort portFromJson(const QJsonObject &object)
+{
+    ConnectionPort port;
+    port.id = object.value(QStringLiteral("id")).toString();
+    port.name = object.value(QStringLiteral("name")).toString();
+    port.profile = profileFromJson(object);
+    return port;
+}
 }
 
 ProjectLoadResult JsonProjectRepository::load(const QString &path) const
@@ -123,7 +171,8 @@ ProjectLoadResult JsonProjectRepository::load(const QString &path) const
         return output;
     }
     const QJsonObject root = json.object();
-    if (root.value(QStringLiteral("schemaVersion")).toInt() != 1)
+    const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt();
+    if (schemaVersion < 1 || schemaVersion > 2)
     {
         output.result = OperationResult::fail(QStringLiteral("unsupported_version"),
                                               QStringLiteral("schemaVersion"),
@@ -132,23 +181,31 @@ ProjectLoadResult JsonProjectRepository::load(const QString &path) const
     }
 
     ProjectDocument document;
+    document.schemaVersion = 2;  // 输出始终为 v2
     const QJsonObject metadata = root.value(QStringLiteral("project")).toObject();
     document.project.name = metadata.value(QStringLiteral("name")).toString();
     document.project.description = metadata.value(QStringLiteral("description")).toString();
     document.project.createdAt = QDateTime::fromString(metadata.value(QStringLiteral("createdAt")).toString(), Qt::ISODate);
     document.project.updatedAt = QDateTime::fromString(metadata.value(QStringLiteral("updatedAt")).toString(), Qt::ISODate);
-    const QJsonObject profile = root.value(QStringLiteral("serverProfile")).toObject();
-    document.serverProfile.connectionType = profile.value(QStringLiteral("connectionType")).toString() == QStringLiteral("RTU") ? ConnectionType::Rtu : ConnectionType::Tcp;
-    document.serverProfile.tcpHost = profile.value(QStringLiteral("tcpHost")).toString(QStringLiteral("127.0.0.1"));
-    document.serverProfile.tcpPort = quint16(profile.value(QStringLiteral("tcpPort")).toInt(5020));
-    document.serverProfile.serialPort = profile.value(QStringLiteral("serialPort")).toString();
-    document.serverProfile.baudRate = profile.value(QStringLiteral("baudRate")).toInt(9600);
-    const QString parity = profile.value(QStringLiteral("parity")).toString(QStringLiteral("N"));
-    document.serverProfile.parity = parity.isEmpty() ? QLatin1Char('N') : parity.at(0);
-    document.serverProfile.dataBits = profile.value(QStringLiteral("dataBits")).toInt(8);
-    document.serverProfile.stopBits = profile.value(QStringLiteral("stopBits")).toInt(1);
-    document.serverProfile.pollIntervalMs = profile.value(QStringLiteral("pollIntervalMs")).toInt(1000);
-    document.serverProfile.slaveAddress = quint8(profile.value(QStringLiteral("slaveAddress")).toInt(1));
+
+    // v1 迁移：单 serverProfile → 一个默认端口
+    if (schemaVersion == 1)
+    {
+        const QJsonObject profile = root.value(QStringLiteral("serverProfile")).toObject();
+        ConnectionPort port;
+        port.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        port.name = QStringLiteral("默认端口");
+        port.profile = profileFromJson(profile);
+        document.ports.append(port);
+    }
+    else  // v2
+    {
+        for (const QJsonValue &value : root.value(QStringLiteral("ports")).toArray())
+        {
+            document.ports.append(portFromJson(value.toObject()));
+        }
+    }
+
     for (const QJsonValue &value : root.value(QStringLiteral("groups")).toArray())
     {
         const QJsonObject groupJson = value.toObject();
@@ -158,16 +215,32 @@ ProjectLoadResult JsonProjectRepository::load(const QString &path) const
         group.color = groupJson.value(QStringLiteral("color")).toString(QStringLiteral("#f54e00"));
         group.description = groupJson.value(QStringLiteral("description")).toString();
         group.isDefault = groupJson.value(QStringLiteral("isDefault")).toBool();
+        group.enabled = groupJson.value(QStringLiteral("enabled")).toBool(true);
+        group.canvasX = groupJson.value(QStringLiteral("canvasX")).toInt(0);
+        group.canvasY = groupJson.value(QStringLiteral("canvasY")).toInt(0);
+        // v1 迁移：所有分组绑定到唯一端口
+        if (schemaVersion == 1 && !document.ports.isEmpty())
+        {
+            group.portId = document.ports.first().id;
+        }
+        else  // v2
+        {
+            group.portId = groupJson.value(QStringLiteral("portId")).toString();
+        }
         document.groups.append(group);
     }
+
     for (const QJsonValue &value : root.value(QStringLiteral("registers")).toArray())
     {
         document.registers.append(pointFromJson(value.toObject()));
     }
+
     const QJsonObject uiState = root.value(QStringLiteral("uiState")).toObject();
     document.uiState.windowSize = QSize(uiState.value(QStringLiteral("width")).toInt(1440),
                                         uiState.value(QStringLiteral("height")).toInt(900));
     document.uiState.selectedGroupId = uiState.value(QStringLiteral("selectedGroupId")).toString();
+    document.uiState.portColWidth = uiState.value(QStringLiteral("portColWidth")).toInt(250);
+    document.uiState.logColWidth = uiState.value(QStringLiteral("logColWidth")).toInt(300);
     for (const QJsonValue &value : uiState.value(QStringLiteral("horizontalSplitterSizes")).toArray())
     {
         document.uiState.horizontalSplitterSizes.append(value.toInt());
@@ -187,25 +260,21 @@ OperationResult JsonProjectRepository::save(const QString &path,
     const OperationResult validation = ValidationService::validateProject(document);
     if (!validation.success) { return validation; }
     QJsonObject root;
-    root.insert(QStringLiteral("schemaVersion"), 1);
+    root.insert(QStringLiteral("schemaVersion"), 2);
     QJsonObject metadata;
     metadata.insert(QStringLiteral("name"), document.project.name);
     metadata.insert(QStringLiteral("description"), document.project.description);
     metadata.insert(QStringLiteral("createdAt"), document.project.createdAt.toString(Qt::ISODate));
     metadata.insert(QStringLiteral("updatedAt"), document.project.updatedAt.toString(Qt::ISODate));
     root.insert(QStringLiteral("project"), metadata);
-    QJsonObject profile;
-    profile.insert(QStringLiteral("connectionType"), document.serverProfile.connectionType == ConnectionType::Tcp ? QStringLiteral("TCP") : QStringLiteral("RTU"));
-    profile.insert(QStringLiteral("tcpHost"), document.serverProfile.tcpHost);
-    profile.insert(QStringLiteral("tcpPort"), int(document.serverProfile.tcpPort));
-    profile.insert(QStringLiteral("serialPort"), document.serverProfile.serialPort);
-    profile.insert(QStringLiteral("baudRate"), document.serverProfile.baudRate);
-    profile.insert(QStringLiteral("parity"), QString(document.serverProfile.parity));
-    profile.insert(QStringLiteral("dataBits"), document.serverProfile.dataBits);
-    profile.insert(QStringLiteral("stopBits"), document.serverProfile.stopBits);
-    profile.insert(QStringLiteral("pollIntervalMs"), document.serverProfile.pollIntervalMs);
-    profile.insert(QStringLiteral("slaveAddress"), int(document.serverProfile.slaveAddress));
-    root.insert(QStringLiteral("serverProfile"), profile);
+
+    QJsonArray ports;
+    for (const ConnectionPort &port : document.ports)
+    {
+        ports.append(portToJson(port));
+    }
+    root.insert(QStringLiteral("ports"), ports);
+
     QJsonArray groups;
     for (const RegisterGroup &group : document.groups)
     {
@@ -215,16 +284,24 @@ OperationResult JsonProjectRepository::save(const QString &path,
         object.insert(QStringLiteral("color"), group.color);
         object.insert(QStringLiteral("description"), group.description);
         object.insert(QStringLiteral("isDefault"), group.isDefault);
+        object.insert(QStringLiteral("enabled"), group.enabled);
+        object.insert(QStringLiteral("portId"), group.portId);
+        object.insert(QStringLiteral("canvasX"), group.canvasX);
+        object.insert(QStringLiteral("canvasY"), group.canvasY);
         groups.append(object);
     }
     root.insert(QStringLiteral("groups"), groups);
+
     QJsonArray registers;
     for (const RegisterPoint &point : document.registers) { registers.append(pointToJson(point)); }
     root.insert(QStringLiteral("registers"), registers);
+
     QJsonObject uiState;
     uiState.insert(QStringLiteral("width"), document.uiState.windowSize.width());
     uiState.insert(QStringLiteral("height"), document.uiState.windowSize.height());
     uiState.insert(QStringLiteral("selectedGroupId"), document.uiState.selectedGroupId);
+    uiState.insert(QStringLiteral("portColWidth"), document.uiState.portColWidth);
+    uiState.insert(QStringLiteral("logColWidth"), document.uiState.logColWidth);
     QJsonArray horizontalSizes;
     for (int size : document.uiState.horizontalSplitterSizes) { horizontalSizes.append(size); }
     QJsonArray verticalSizes;

@@ -9,3 +9,63 @@ QPushButton:disabled { color: #999892; background: #e6e5e0; }
 QPushButton#primaryButton { color: white; background: #f54e00; border-color: #f54e00; }
 QPushButton#dangerButton { color: #cf2d56; background: rgba(207, 45, 86, 25); }
 QMenu::item:selected { background: #f3dfd4; }
+QPushButton#addPortButton, QToolButton#addGroupToolButton {
+    color: white;
+    background: #f54e00;
+    border-color: #f54e00;
+}
+QWidget[portCard="true"] {
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 12px;
+}
+QPushButton[dangerAction="true"] {
+    color: #cf2d56;
+}
+QWidget#groupCard {
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 34);
+    border-radius: 12px;
+}
+QWidget#groupCard[selected="true"] {
+    border: 2px solid #f54e00;
+}
+QWidget#groupCard[groupEnabled="false"] {
+    background: #e6e5e0;
+    color: #85847e;
+}
+QWidget#groupColorBar {
+    border-top-left-radius: 11px;
+    border-top-right-radius: 11px;
+}
+QWidget#groupCardContent {
+    background: transparent;
+}
+QLabel#groupName {
+    font: 600 15px "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+}
+QLabel#groupDescription, QLabel#groupRegisterUnit, QLabel#groupPortLabel {
+    color: rgba(38, 37, 30, 150);
+    background: transparent;
+}
+QLabel#groupRegisterCount {
+    font: 26px "Bahnschrift", "Segoe UI";
+    background: transparent;
+}
+QPushButton#groupEnabledToggle {
+    min-height: 22px;
+    padding: 2px 9px;
+    color: #1f8a65;
+    background: rgba(31, 138, 101, 28);
+    border: 0;
+    border-radius: 11px;
+}
+QPushButton#groupEnabledToggle[groupEnabled="false"] {
+    color: #77766f;
+    background: rgba(38, 37, 30, 20);
+}
+QComboBox#groupPortCombo {
+    min-height: 28px;
+    padding: 4px 8px;
+}

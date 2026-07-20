@@ -1,6 +1,7 @@
 #ifndef DOMAIN_ENUMS_H
 #define DOMAIN_ENUMS_H
 
+#include <QMetaType>
 #include <QString>
 
 enum class ConnectionType
@@ -50,6 +51,8 @@ enum class RuntimeState
     Stopping,
     Fault
 };
+
+Q_DECLARE_METATYPE(RuntimeState)
 
 QString dataTypeToString(DataType type);
 bool dataTypeFromString(const QString &text, DataType *type);

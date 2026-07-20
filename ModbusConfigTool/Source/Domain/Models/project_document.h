@@ -1,9 +1,9 @@
 #ifndef PROJECT_DOCUMENT_H
 #define PROJECT_DOCUMENT_H
 
+#include "Domain/Models/connection_port.h"
 #include "Domain/Models/register_group.h"
 #include "Domain/Models/register_point.h"
-#include "Domain/Models/server_profile.h"
 
 #include <QDateTime>
 #include <QList>
@@ -21,15 +21,17 @@ struct UiState
 {
     QSize windowSize = QSize(1440, 900);
     QString selectedGroupId;
+    int portColWidth = 250;
+    int logColWidth = 300;
     QList<int> horizontalSplitterSizes;
     QList<int> verticalSplitterSizes;
 };
 
 struct ProjectDocument
 {
-    int schemaVersion = 1;
+    int schemaVersion = 2;
     ProjectMetadata project;
-    ServerProfile serverProfile;
+    QList<ConnectionPort> ports;
     QList<RegisterGroup> groups;
     QList<RegisterPoint> registers;
     UiState uiState;

@@ -12,11 +12,17 @@ ProjectDocument ProjectFactory::createEmpty()
     document.project.createdAt = now;
     document.project.updatedAt = now;
 
+    ConnectionPort port;
+    port.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    port.name = QStringLiteral("默认连接");
+    document.ports.append(port);
+
     RegisterGroup defaultGroup;
     defaultGroup.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     defaultGroup.name = QStringLiteral("默认分组");
     defaultGroup.description = QStringLiteral("未分类寄存器");
     defaultGroup.isDefault = true;
+    defaultGroup.portId = port.id;
     document.groups.append(defaultGroup);
     document.uiState.selectedGroupId = defaultGroup.id;
     return document;

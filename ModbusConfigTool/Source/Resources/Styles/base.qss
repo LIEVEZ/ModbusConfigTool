@@ -6,6 +6,77 @@ QWidget {
 QMainWindow, QMenuBar, QMenu, QStatusBar {
     background: #f7f7f4;
 }
+QWidget#workspaceRoot {
+    background: #f2f1ed;
+}
+QToolBar#workspaceToolBar {
+    min-height: 48px;
+    padding: 0 14px;
+    spacing: 10px;
+    background: #f7f7f4;
+    border: 0;
+    border-bottom: 1px solid rgba(38, 37, 30, 24);
+}
+QLabel#groupCountBadge {
+    padding: 0 10px;
+    border-radius: 10px;
+    color: #f54e00;
+    background: #f3dfd4;
+}
+QSplitter#workspaceSplitter::handle {
+    width: 1px;
+    background: rgba(38, 37, 30, 24);
+}
+QWidget#connectionPortList, QWidget#portListHeader, QWidget#portListContent,
+QScrollArea#portListScrollArea, QScrollArea#groupCanvasScrollArea {
+    background: #f7f7f4;
+    border: 0;
+}
+QWidget#portListHeader {
+    border-bottom: 1px solid rgba(38, 37, 30, 24);
+}
+QLabel#portListEyebrow, QLabel#portConnectionSummary,
+QLabel#portMeta, QLabel#emptyPortHint {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+}
+QLabel#portListTitle {
+    font: 600 17px "Bahnschrift", "Segoe UI";
+    background: transparent;
+}
+QLabel#portName {
+    font: 600 15px "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+}
+QLabel#portTypeBadge {
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: rgba(38, 37, 30, 160);
+    background: rgba(38, 37, 30, 16);
+}
+QLabel#portConnectionSummary, QLabel#portMeta {
+    margin-left: 18px;
+}
+QWidget#eventLogView, QWidget#eventLogHeader, QPlainTextEdit#eventLogConsole {
+    background: #f7f7f4;
+}
+QWidget#eventLogHeader {
+    border-bottom: 1px solid rgba(38, 37, 30, 24);
+}
+QLabel#eventLogEyebrow {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+}
+QLabel#eventLogTitle {
+    font: 600 17px "Bahnschrift", "Segoe UI";
+    background: transparent;
+}
+QPlainTextEdit#eventLogConsole {
+    padding: 12px 14px;
+    border: 0;
+    color: rgba(38, 37, 30, 190);
+    font: 12px Consolas, monospace;
+}
 QWidget#card, QWidget#runtimeControlCard {
     background: #ebeae5;
     border: 1px solid rgba(38, 37, 30, 28);
