@@ -12,11 +12,13 @@ GroupCanvasView::GroupCanvasView(QWidget *parent) : QWidget(parent)
     setMouseTracking(true);
 }
 
-void GroupCanvasView::setModel(const ProjectDocument &doc)
+void GroupCanvasView::setModel(const ProjectDocument &doc,
+                               const QHash<QString, RuntimeState> &portStates)
 {
     // Remove old cards
     qDeleteAll(m_cards);
     m_cards.clear();
+    m_portStates = portStates;
 
     for (const RegisterGroup &group : doc.groups)
     {
@@ -29,7 +31,8 @@ void GroupCanvasView::setModel(const ProjectDocument &doc)
             }
         }
         auto *card = new GroupCardWidget(
-            group, groupPoints.size(), doc.ports, groupPoints, this);
+            group, groupPoints.size(), doc.ports, groupPoints,
+            isPortLive(group.portId), this);
         card->adjustSize();
 
         card->move(group.canvasX, group.canvasY);
@@ -185,4 +188,27 @@ void GroupCanvasView::updateCanvasExtent()
     }
     setMinimumSize(requiredWidth, requiredHeight);
     updateGeometry();
+}
+
+void GroupCanvasView::updatePortStates(const QHash<QString, RuntimeState> &portStates)
+{
+    m_portStates = portStates;
+    for (auto it = m_cards.begin(); it != m_cards.end(); ++it)
+    {
+        GroupCardWidget *card = it.value();
+        if (!card)
+        {
+            continue;
+        }
+        card->setPortLive(isPortLive(card->boundPortId()));
+    }
+}
+
+bool GroupCanvasView::isPortLive(const QString &portId) const
+{
+    if (portId.isEmpty())
+    {
+        return false;
+    }
+    return m_portStates.value(portId, RuntimeState::Idle) == RuntimeState::Running;
 }

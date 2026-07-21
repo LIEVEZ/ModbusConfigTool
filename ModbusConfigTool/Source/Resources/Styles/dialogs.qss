@@ -1,3 +1,37 @@
 QDialog { background: #f2f1ed; }
 QDialog QLabel { background: transparent; }
 QDialogButtonBox QPushButton { min-width: 88px; }
+
+QLabel#groupConfigTitle {
+    font: 600 20px "Bahnschrift", "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+}
+QLabel#groupConfigSubtitle, QLabel#groupConfigFooterInfo {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+    font-size: 12px;
+}
+QLineEdit#groupConfigSearch {
+    min-height: 30px;
+    background: #ffffff;
+}
+QWidget#groupConfigRowActions {
+    background: transparent;
+}
+
+QLabel#realtimeTitle {
+    font: 600 20px "Bahnschrift", "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+}
+QLabel#realtimeDescription {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+    font-size: 12px;
+}
+QLabel#realtimeCountBadge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: #f54e00;
+    background: #f3dfd4;
+    font-size: 12px;
+}

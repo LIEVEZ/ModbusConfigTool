@@ -6,9 +6,14 @@
 
 #include <QApplication>
 #include <QAbstractItemView>
+#include <QColor>
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QFrame>
+
+#include <QHelpEvent>
+#include <QGraphicsDropShadowEffect>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -30,70 +35,145 @@ QString portDisplayName(const ConnectionPort &port)
         .arg(port.name.isEmpty() ? QStringLiteral("默认端口") : port.name, type);
 }
 
-QString tooltipText(const RegisterGroup &group,
-                    int registerCount,
-                    const QList<RegisterPoint> &points)
-{
-    QStringList lines;
-    lines.append(group.name);
-    lines.append(group.description.isEmpty() ? QStringLiteral("无描述") : group.description);
-    lines.append(QStringLiteral("%1 条寄存器").arg(registerCount));
-
-    const int summaryCount = qMin(3, points.size());
-    for (int index = 0; index < summaryCount; ++index)
-    {
-        const RegisterPoint &point = points.at(index);
-        lines.append(QStringLiteral("%1：%2")
-                         .arg(point.name,
-                              point.currentValue.toDisplayString(point.precision)));
-    }
-    return lines.join(QLatin1Char('\n'));
-}
-
-QString runtimeTooltipText(const QString &name,
-                           const QString &description,
-                           int registerCount,
-                           const QList<RegisterPoint> &points)
-{
-    RegisterGroup group;
-    group.name = name;
-    group.description = description;
-    return tooltipText(group, registerCount, points);
-}
-
 void makeMouseTransparent(QWidget *widget)
 {
     widget->setAttribute(Qt::WA_TransparentForMouseEvents);
 }
 }
 
+class GroupHoverTip : public QFrame
+{
+public:
+    explicit GroupHoverTip()
+        : QFrame(nullptr, Qt::ToolTip | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus)
+    {
+        setObjectName(QStringLiteral("groupHoverTip"));
+        setAttribute(Qt::WA_ShowWithoutActivating);
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setFocusPolicy(Qt::NoFocus);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(12, 10, 12, 10);
+        layout->setSpacing(4);
+
+        m_title = new QLabel(this);
+        m_title->setObjectName(QStringLiteral("groupHoverTitle"));
+        m_title->setWordWrap(true);
+
+        m_description = new QLabel(this);
+        m_description->setObjectName(QStringLiteral("groupHoverDescription"));
+        m_description->setWordWrap(true);
+
+        m_count = new QLabel(this);
+        m_count->setObjectName(QStringLiteral("groupHoverCount"));
+
+        m_runtime = new QLabel(this);
+        m_runtime->setObjectName(QStringLiteral("groupHoverRuntime"));
+        m_runtime->setWordWrap(true);
+
+        layout->addWidget(m_title);
+        layout->addWidget(m_description);
+        layout->addWidget(m_count);
+        layout->addWidget(m_runtime);
+
+        setStyleSheet(QStringLiteral(
+            "QFrame#groupHoverTip {"
+            "  background: #26251e;"
+            "  color: #f2f1ed;"
+            "  border-radius: 8px;"
+            "  border: 1px solid rgba(255,255,255,40);"
+            "}"
+            "QLabel { background: transparent; color: #f2f1ed; font: 12px \"Segoe UI\", \"Microsoft YaHei\"; }"
+            "QLabel#groupHoverTitle { color: #ffb38a; font-weight: 600; }"
+            "QLabel#groupHoverDescription, QLabel#groupHoverCount { color: rgba(242,241,237,200); }"
+            "QLabel#groupHoverRuntime {"
+            "  margin-top: 4px;"
+            "  padding-top: 6px;"
+            "  border-top: 1px solid rgba(255,255,255,38);"
+            "  color: rgba(242,241,237,230);"
+            "}"));
+        hide();
+    }
+
+    void setContent(const QString &name,
+                    const QString &description,
+                    int registerCount,
+                    const QList<RegisterPoint> &points)
+    {
+        m_title->setText(name);
+        m_description->setText(description.isEmpty() ? QStringLiteral("无描述") : description);
+        m_count->setText(QStringLiteral("%1 条寄存器").arg(registerCount));
+
+        QStringList runtimeLines;
+        const int summaryCount = qMin(3, points.size());
+        for (int index = 0; index < summaryCount; ++index)
+        {
+            const RegisterPoint &point = points.at(index);
+            runtimeLines.append(QStringLiteral("%1：%2")
+                                    .arg(point.name,
+                                         point.currentValue.toDisplayString(point.precision)));
+        }
+        if (runtimeLines.isEmpty())
+        {
+            m_runtime->setText(QStringLiteral("暂无实时值"));
+        }
+        else
+        {
+            m_runtime->setText(runtimeLines.join(QLatin1Char('\n')));
+        }
+        adjustSize();
+        setFixedWidth(qBound(180, sizeHint().width() + 8, 280));
+        adjustSize();
+    }
+
+    void moveNear(const QPoint &globalPos)
+    {
+        move(globalPos + QPoint(16, 18));
+        if (!isVisible())
+        {
+            show();
+        }
+        raise();
+    }
+
+private:
+    QLabel *m_title = nullptr;
+    QLabel *m_description = nullptr;
+    QLabel *m_count = nullptr;
+    QLabel *m_runtime = nullptr;
+};
+
 GroupCardWidget::GroupCardWidget(const RegisterGroup &group,
                                  int registerCount,
                                  const QList<ConnectionPort> &ports,
                                  const QList<RegisterPoint> &points,
+                                 bool portLive,
                                  QWidget *parent)
     : QWidget(parent),
       m_groupId(group.id),
       m_name(group.name),
       m_description(group.description),
       m_registerCount(registerCount),
-      m_groupEnabled(group.enabled)
+      m_groupEnabled(group.enabled),
+      m_portLive(portLive)
 {
     setObjectName(QStringLiteral("groupCard"));
     setAttribute(Qt::WA_StyledBackground, true);
     setProperty("groupEnabled", m_groupEnabled);
     setProperty("selected", false);
-    setFixedWidth(210);
+    setFixedWidth(190);
     setMinimumHeight(154);
     setCursor(Qt::OpenHandCursor);
     setMouseTracking(true);
-    setToolTip(tooltipText(group, registerCount, points));
     if (!m_groupEnabled)
     {
         auto *opacity = new QGraphicsOpacityEffect(this);
         opacity->setOpacity(0.62);
         setGraphicsEffect(opacity);
     }
+
+    m_hoverTip = new GroupHoverTip;
+    rebuildHoverContent(points);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -149,6 +229,14 @@ GroupCardWidget::GroupCardWidget(const RegisterGroup &group,
     auto *portLabel = new QLabel(QStringLiteral("通信端口"), this);
     portLabel->setObjectName(QStringLiteral("groupPortLabel"));
     makeMouseTransparent(portLabel);
+    contentLayout->addWidget(portLabel);
+
+    auto *portRow = new QHBoxLayout;
+    portRow->setSpacing(6);
+    m_portLiveDot = new QLabel(this);
+    m_portLiveDot->setObjectName(QStringLiteral("groupPortLiveDot"));
+    m_portLiveDot->setFixedSize(10, 10);
+    makeMouseTransparent(m_portLiveDot);
     m_portCombo = new QComboBox(this);
     m_portCombo->setObjectName(QStringLiteral("groupPortCombo"));
     m_portCombo->addItem(QStringLiteral("未绑定端口"), QString());
@@ -164,8 +252,10 @@ GroupCardWidget::GroupCardWidget(const RegisterGroup &group,
     m_portCombo->installEventFilter(this);
     m_portView->installEventFilter(this);
     m_portViewport->installEventFilter(this);
-    contentLayout->addWidget(portLabel);
-    contentLayout->addWidget(m_portCombo);
+    portRow->addWidget(m_portLiveDot, 0, Qt::AlignVCenter);
+    portRow->addWidget(m_portCombo, 1);
+    contentLayout->addLayout(portRow);
+    applyPortLiveStyle();
 
     connect(m_enabledButton, &QPushButton::clicked, this, [this]()
     {
@@ -180,6 +270,13 @@ GroupCardWidget::GroupCardWidget(const RegisterGroup &group,
     });
 }
 
+GroupCardWidget::~GroupCardWidget()
+{
+    hideHoverTip();
+    delete m_hoverTip;
+    m_hoverTip = nullptr;
+}
+
 bool GroupCardWidget::eventFilter(QObject *watched, QEvent *event)
 {
     const bool controlObject = watched == m_enabledButton
@@ -191,6 +288,7 @@ bool GroupCardWidget::eventFilter(QObject *watched, QEvent *event)
         m_controlInteraction = true;
         m_pressedForDrag = false;
         m_dragging = false;
+        hideHoverTip();
     }
     else if ((watched == m_portView || watched == m_portViewport)
              && event->type() == QEvent::Hide)
@@ -231,8 +329,78 @@ void GroupCardWidget::updateRegisterCount(int count)
 
 void GroupCardWidget::updateRuntimeSummary(const QList<RegisterPoint> &points)
 {
-    setToolTip(runtimeTooltipText(
-        m_name, m_description, m_registerCount, points));
+    rebuildHoverContent(points);
+    if (m_hovering && !m_dragging && !m_controlInteraction)
+    {
+        showHoverTip(QCursor::pos());
+    }
+}
+
+void GroupCardWidget::rebuildHoverContent(const QList<RegisterPoint> &points)
+{
+    QStringList lines;
+    lines.append(m_name);
+    lines.append(m_description.isEmpty() ? QStringLiteral("无描述") : m_description);
+    lines.append(QStringLiteral("%1 条寄存器").arg(m_registerCount));
+    const int summaryCount = qMin(3, points.size());
+    for (int index = 0; index < summaryCount; ++index)
+    {
+        const RegisterPoint &point = points.at(index);
+        lines.append(QStringLiteral("%1：%2")
+                         .arg(point.name,
+                              point.currentValue.toDisplayString(point.precision)));
+    }
+    m_hoverSummaryText = lines.join(QLatin1Char('\n'));
+
+    // 仅使用自定义深色悬停层，禁用系统原生 toolTip，避免双提示。
+    setToolTip(QString());
+    if (m_hoverTip)
+    {
+        m_hoverTip->setContent(m_name, m_description, m_registerCount, points);
+    }
+}
+
+void GroupCardWidget::showHoverTip(const QPoint &globalPos)
+{
+    if (!m_hoverTip || m_dragging || m_controlInteraction)
+    {
+        return;
+    }
+    m_hoverTip->moveNear(globalPos);
+}
+
+void GroupCardWidget::hideHoverTip()
+{
+    if (m_hoverTip)
+    {
+        m_hoverTip->hide();
+    }
+}
+
+void GroupCardWidget::enterEvent(QEvent *event)
+{
+    m_hovering = true;
+    if (!m_dragging && !m_controlInteraction)
+    {
+        showHoverTip(QCursor::pos());
+    }
+    QWidget::enterEvent(event);
+}
+
+void GroupCardWidget::leaveEvent(QEvent *event)
+{
+    m_hovering = false;
+    hideHoverTip();
+    QWidget::leaveEvent(event);
+}
+bool GroupCardWidget::event(QEvent *event)
+{
+    // 吞掉系统 ToolTip 请求，只保留自定义 GroupHoverTip。
+    if (event->type() == QEvent::ToolTip)
+    {
+        return true;
+    }
+    return QWidget::event(event);
 }
 
 void GroupCardWidget::mousePressEvent(QMouseEvent *event)
@@ -265,6 +433,8 @@ void GroupCardWidget::mouseMoveEvent(QMouseEvent *event)
                 >= QApplication::startDragDistance())
         {
             m_dragging = true;
+            hideHoverTip();
+            applyDraggingVisual(true);
             emit dragStarted(m_groupId, m_dragStartPos);
         }
         if (m_dragging)
@@ -273,6 +443,12 @@ void GroupCardWidget::mouseMoveEvent(QMouseEvent *event)
         }
         event->accept();
         return;
+    }
+
+    if (m_hovering && !m_dragging && !m_controlInteraction
+        && !(event->buttons() & Qt::LeftButton))
+    {
+        showHoverTip(event->globalPos());
     }
     QWidget::mouseMoveEvent(event);
 }
@@ -284,6 +460,7 @@ void GroupCardWidget::mouseReleaseEvent(QMouseEvent *event)
     {
         m_dragging = false;
         m_pressedForDrag = false;
+        applyDraggingVisual(false);
         emit dragFinished(m_groupId);
         event->accept();
         return;
@@ -304,6 +481,7 @@ void GroupCardWidget::mouseDoubleClickEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton
         && !isInteractiveChild(childAt(event->pos())))
     {
+        hideHoverTip();
         emit doubleClicked(m_groupId);
         event->accept();
         return;
@@ -313,6 +491,7 @@ void GroupCardWidget::mouseDoubleClickEvent(QMouseEvent *event)
 
 void GroupCardWidget::contextMenuEvent(QContextMenuEvent *event)
 {
+    hideHoverTip();
     emit contextMenuRequested(m_groupId, event->globalPos());
     event->accept();
 }
@@ -364,9 +543,81 @@ void GroupCardWidget::emitPendingPortChange()
     emit portChangeRequested(m_groupId, m_pendingPortId);
 }
 
+
+QString GroupCardWidget::boundPortId() const
+{
+    return m_portCombo ? m_portCombo->currentData().toString() : QString();
+}
+
+void GroupCardWidget::setPortLive(bool live)
+{
+    if (m_portLive == live)
+    {
+        return;
+    }
+    m_portLive = live;
+    applyPortLiveStyle();
+}
+
+void GroupCardWidget::applyPortLiveStyle()
+{
+    if (!m_portLiveDot)
+    {
+        return;
+    }
+    if (m_portLive)
+    {
+        m_portLiveDot->setStyleSheet(QStringLiteral(
+            "background: #1f8a65; border-radius: 5px;"
+            "border: 2px solid rgba(31,138,101,80);"));
+        m_portLiveDot->setFixedSize(10, 10);
+    }
+    else
+    {
+        m_portLiveDot->setStyleSheet(QStringLiteral(
+            "background: rgba(38,37,30,40); border-radius: 5px;"
+            "border: 2px solid transparent;"));
+        m_portLiveDot->setFixedSize(10, 10);
+    }
+}
+
+void GroupCardWidget::applyDraggingVisual(bool dragging)
+{
+    setProperty("dragging", dragging);
+    if (dragging)
+    {
+        auto *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(28);
+        shadow->setOffset(0, 10);
+        shadow->setColor(QColor(38, 37, 30, 70));
+        setGraphicsEffect(shadow);
+        raise();
+    }
+    else
+    {
+        restoreIdleGraphicsEffect();
+    }
+    refreshStyle();
+}
+
+void GroupCardWidget::restoreIdleGraphicsEffect()
+{
+    if (!m_groupEnabled)
+    {
+        auto *opacity = new QGraphicsOpacityEffect(this);
+        opacity->setOpacity(0.62);
+        setGraphicsEffect(opacity);
+    }
+    else
+    {
+        setGraphicsEffect(nullptr);
+    }
+}
+
 void GroupCardWidget::refreshStyle()
 {
     style()->unpolish(this);
     style()->polish(this);
     update();
 }
+

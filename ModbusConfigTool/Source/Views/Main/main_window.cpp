@@ -20,6 +20,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
@@ -52,11 +53,9 @@ void MainWindow::buildToolBar()
     m_workspaceToolBar->setMovable(false);
     m_workspaceToolBar->setFloatable(false);
 
-    m_groupCountBadge = new QLabel(m_workspaceToolBar);
-    m_groupCountBadge->setObjectName(QStringLiteral("groupCountBadge"));
-    m_groupCountBadge->setFixedHeight(32);
-    m_groupCountBadge->setAlignment(Qt::AlignCenter);
-    m_workspaceToolBar->addWidget(m_groupCountBadge);
+    auto *title = new QLabel(QStringLiteral("分组画布"), m_workspaceToolBar);
+    title->setObjectName(QStringLiteral("workspaceTitle"));
+    m_workspaceToolBar->addWidget(title);
 
     QAction *addGroupAction = m_workspaceToolBar->addAction(QStringLiteral("＋ 新增分组"));
     addGroupAction->setObjectName(QStringLiteral("addGroupToolAction"));
@@ -66,6 +65,26 @@ void MainWindow::buildToolBar()
         addGroupButton->setObjectName(QStringLiteral("addGroupToolButton"));
         addGroupButton->setFixedHeight(32);
     }
+
+    m_groupCountBadge = new QLabel(m_workspaceToolBar);
+    m_groupCountBadge->setObjectName(QStringLiteral("groupCountBadge"));
+    m_groupCountBadge->setFixedHeight(32);
+    m_groupCountBadge->setAlignment(Qt::AlignCenter);
+    m_workspaceToolBar->addWidget(m_groupCountBadge);
+
+    auto *spacer = new QWidget(m_workspaceToolBar);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    spacer->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_workspaceToolBar->addWidget(spacer);
+
+    auto *hint = new QLabel(
+        QStringLiteral("悬停看摘要 · 双击看实时数值 · 右键更多操作 · 拖动移动位置"),
+        m_workspaceToolBar);
+    hint->setObjectName(QStringLiteral("workspaceHintBadge"));
+    hint->setFixedHeight(32);
+    hint->setAlignment(Qt::AlignCenter);
+    m_workspaceToolBar->addWidget(hint);
+
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
 }
 
@@ -89,12 +108,40 @@ void MainWindow::buildMenus()
     QMenu *organization = menuBar()->addMenu(QStringLiteral("组织"));
     QAction *addGroupAction = organization->addAction(QStringLiteral("新增分组"));
 
+    QMenu *connection = menuBar()->addMenu(QStringLiteral("连接配置"));
+    connection->setObjectName(QStringLiteral("connectionConfigMenu"));
+    QAction *addPortAction = connection->addAction(QStringLiteral("新增端口"));
+    addPortAction->setObjectName(QStringLiteral("addPortMenuAction"));
+    QAction *managePortsAction = connection->addAction(QStringLiteral("管理连接端口"));
+    managePortsAction->setObjectName(QStringLiteral("managePortsMenuAction"));
+
+    QMenu *help = menuBar()->addMenu(QStringLiteral("帮助"));
+    help->setObjectName(QStringLiteral("helpMenu"));
+    QAction *aboutAction = help->addAction(QStringLiteral("关于"));
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+
     connect(newAction, &QAction::triggered, this, &MainWindow::newProject);
     connect(openAction, &QAction::triggered, this, &MainWindow::openProject);
     connect(saveAction, &QAction::triggered, this, [this]() { saveProject(false); });
     connect(saveAsAction, &QAction::triggered, this, [this]() { saveProject(true); });
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
+    connect(addPortAction, &QAction::triggered, this, &MainWindow::addPort);
+    connect(managePortsAction, &QAction::triggered, this, [this]() {
+        if (m_portListView)
+        {
+            m_portListView->focusPortPanel();
+        }
+    });
+    connect(aboutAction, &QAction::triggered, this, [this]() {
+        QMessageBox::about(
+            this,
+            QStringLiteral("关于 Modbus 配置工具"),
+            QStringLiteral(
+                "<b>Modbus 配置工具</b><br/>"
+                "多端口连接 · 分组画布 · 寄存器实时监控<br/><br/>"
+                "用于管理 TCP/RTU 连接端口、寄存器分组与实时采集配置。"));
+    });
 
     rebuildRecentMenu();
 }
@@ -106,8 +153,8 @@ void MainWindow::buildWorkspace()
     m_workspaceSplitter->setChildrenCollapsible(false);
 
     m_portListView = new ConnectionPortListView(m_workspaceSplitter);
-    m_portListView->setMinimumWidth(220);
-    m_portListView->setMaximumWidth(360);
+    m_portListView->setMinimumWidth(260);
+    m_portListView->setMaximumWidth(380);
 
     m_canvasView = new GroupCanvasView(m_workspaceSplitter);
     auto *canvasScrollArea = new QScrollArea(m_workspaceSplitter);
@@ -126,7 +173,7 @@ void MainWindow::buildWorkspace()
     m_workspaceSplitter->setStretchFactor(0, 0);
     m_workspaceSplitter->setStretchFactor(1, 1);
     m_workspaceSplitter->setStretchFactor(2, 0);
-    m_workspaceSplitter->setSizes(QList<int>() << 250 << 1050 << 300);
+    m_workspaceSplitter->setSizes(QList<int>() << 280 << 1020 << 300);
 
     setCentralWidget(m_workspaceSplitter);
 
@@ -148,8 +195,10 @@ void MainWindow::connectActions()
     {
         m_portStates.insert(portId, state);
         m_portListView->updatePortState(portId, state);
+        m_canvasView->updatePortStates(m_portStates);
         m_logView->appendMessage(QStringLiteral("RUNTIME"), QStringLiteral("MODBUS"),
                                  QStringLiteral("端口 %1: %2").arg(portId, runtimeStateToString(state)));
+        refreshStatus();
     });
 
     connect(m_viewModel, &MainWindowViewModel::runtimeError, this,
@@ -271,7 +320,7 @@ void MainWindow::refreshDocument()
         m_portStates.insert(port.id, m_viewModel->portState(port.id));
     }
     m_portListView->setModel(document.ports, document.groups, m_portStates);
-    m_canvasView->setModel(document);
+    m_canvasView->setModel(document, m_portStates);
     updateGroupCount(document.groups.size());
     if (!m_selectedGroupId.isEmpty())
     {
@@ -283,7 +332,7 @@ void MainWindow::refreshDocument()
 void MainWindow::refreshStatus()
 {
     const ProjectDocument &document = m_viewModel->document();
-    m_statusView->updateStatus(document, m_viewModel->isDirty(), RuntimeState::Idle);
+    m_statusView->updateStatus(document, m_viewModel->isDirty(), m_portStates);
     setWindowTitle(QStringLiteral("%1%2 - Modbus 配置工具")
                    .arg(document.project.name, m_viewModel->isDirty() ? QStringLiteral(" *") : QString()));
 }

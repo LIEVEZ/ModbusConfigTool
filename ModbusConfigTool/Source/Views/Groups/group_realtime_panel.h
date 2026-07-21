@@ -1,10 +1,10 @@
-#ifndef GROUP_REALTIME_PANEL_H
+﻿#ifndef GROUP_REALTIME_PANEL_H
 #define GROUP_REALTIME_PANEL_H
 
 #include <QDialog>
 
+class QLabel;
 class QTableWidget;
-struct RegisterGroup;
 struct ProjectDocument;
 
 class GroupRealtimePanel : public QDialog
@@ -12,7 +12,9 @@ class GroupRealtimePanel : public QDialog
     Q_OBJECT
 
 public:
-    explicit GroupRealtimePanel(const QString &groupId, const ProjectDocument &doc, QWidget *parent = nullptr);
+    explicit GroupRealtimePanel(const QString &groupId,
+                                const ProjectDocument &doc,
+                                QWidget *parent = nullptr);
     void updateValues(const ProjectDocument &doc);
 
 signals:
@@ -21,6 +23,7 @@ signals:
 private:
     QString m_groupId;
     QTableWidget *m_table = nullptr;
+    QLabel *m_countBadge = nullptr;
 };
 
 #endif

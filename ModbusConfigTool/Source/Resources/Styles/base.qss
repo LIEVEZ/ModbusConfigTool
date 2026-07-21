@@ -32,6 +32,12 @@ QScrollArea#portListScrollArea, QScrollArea#groupCanvasScrollArea {
     background: #f7f7f4;
     border: 0;
 }
+QScrollArea#portListScrollArea {
+    background: #f7f7f4;
+}
+QScrollArea#portListScrollArea QWidget#portListContent {
+    background: #f7f7f4;
+}
 QWidget#portListHeader {
     border-bottom: 1px solid rgba(38, 37, 30, 24);
 }
@@ -55,7 +61,23 @@ QLabel#portTypeBadge {
     background: rgba(38, 37, 30, 16);
 }
 QLabel#portConnectionSummary, QLabel#portMeta {
-    margin-left: 18px;
+    margin-left: 0px;
+    padding-left: 0px;
+}
+QLabel#portConnectionSummary {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 11px;
+}
+QLabel#portMeta {
+    font-size: 11px;
+}
+QLabel#portName {
+    min-width: 0;
+}
+QLabel#portTypeBadge {
+    min-width: 36px;
+    max-height: 22px;
+    padding: 1px 6px;
 }
 QWidget#eventLogView, QWidget#eventLogHeader, QPlainTextEdit#eventLogConsole {
     background: #f7f7f4;
@@ -92,3 +114,24 @@ QLabel#successBadge, QLabel#warningBadge {
 }
 QLabel#successBadge { color: #1f8a65; background: rgba(31, 138, 101, 28); }
 QLabel#warningBadge { color: #c08532; background: rgba(192, 133, 50, 34); }
+
+QLabel#workspaceTitle {
+    font: 600 17px "Bahnschrift", "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+    padding-right: 6px;
+}
+QLabel#workspaceHintBadge {
+    padding: 0 12px;
+    border-radius: 999px;
+    color: rgba(38, 37, 30, 150);
+    background: #f7f7f4;
+    border: 1px solid rgba(38, 37, 30, 28);
+    font-size: 12px;
+}
+QLabel#groupCountBadge {
+    padding: 0 10px;
+    border-radius: 999px;
+    color: rgba(38, 37, 30, 150);
+    background: #f7f7f4;
+    border: 1px solid rgba(38, 37, 30, 28);
+}

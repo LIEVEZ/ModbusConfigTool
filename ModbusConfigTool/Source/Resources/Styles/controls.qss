@@ -19,6 +19,10 @@ QWidget[portCard="true"] {
     border: 1px solid rgba(38, 37, 30, 28);
     border-radius: 12px;
 }
+QWidget[portCard="true"][selected="true"] {
+    border: 2px solid #f54e00;
+    background: #fffaf7;
+}
 QPushButton[dangerAction="true"] {
     color: #cf2d56;
 }
@@ -68,4 +72,12 @@ QPushButton#groupEnabledToggle[groupEnabled="false"] {
 QComboBox#groupPortCombo {
     min-height: 28px;
     padding: 4px 8px;
+}
+
+QWidget#groupCard[dragging="true"] {
+    border: 2px solid rgba(38, 37, 30, 70);
+    background: #ffffff;
+}
+QLabel#groupPortLiveDot {
+    background: transparent;
 }

@@ -1,4 +1,4 @@
-#include "register_table_model.h"
+﻿#include "register_table_model.h"
 
 #include <QBrush>
 
@@ -18,7 +18,7 @@ int RegisterTableModel::rowCount(const QModelIndex &parent) const
 
 int RegisterTableModel::columnCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : 13;
+    return parent.isValid() ? 0 : 14;
 }
 
 QVariant RegisterTableModel::data(const QModelIndex &index, int role) const
@@ -45,6 +45,7 @@ QVariant RegisterTableModel::data(const QModelIndex &index, int role) const
     case 10: return point.label;
     case 11: return point.enabled ? QStringLiteral("是") : QStringLiteral("否");
     case 12: return strategyTypeToString(point.strategy.type);
+    case 13: return QString();
     default: return QVariant();
     }
 }
@@ -56,7 +57,7 @@ QVariant RegisterTableModel::headerData(int section, Qt::Orientation orientation
         QStringLiteral("地址"), QStringLiteral("数量"), QStringLiteral("名称"),
         QStringLiteral("类型"), QStringLiteral("存储区"), QStringLiteral("当前值"),
         QStringLiteral("协议键"), QStringLiteral("分类"), QStringLiteral("标签"),
-        QStringLiteral("启用"), QStringLiteral("策略")};
+        QStringLiteral("启用"), QStringLiteral("策略"), QStringLiteral("操作")};
     return headers.value(section);
 }
 
@@ -88,3 +89,4 @@ QString RegisterTableModel::groupName(const QString &groupId) const
     }
     return QString();
 }
+
