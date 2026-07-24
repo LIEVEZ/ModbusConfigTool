@@ -58,6 +58,7 @@ public:
     OperationResult updateRegister(const RegisterPoint &point);
     OperationResult removeRegisters(const QStringList &ids);
     OperationResult importCsvIntoGroup(const QString &groupId, const QString &path, bool replaceGroup);
+    OperationResult importGroupFromCsv(const QString &path, const RegisterGroup &group);
     OperationResult exportGroupCsv(const QString &groupId, const QString &path) const;
 
     // 寄存器批量操作

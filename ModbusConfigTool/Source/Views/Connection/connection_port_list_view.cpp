@@ -209,25 +209,6 @@ ConnectionPortListView::ConnectionPortListView(QWidget *parent) : QWidget(parent
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    auto *header = new QWidget(this);
-    header->setObjectName(QStringLiteral("portListHeader"));
-    auto *headerLayout = new QVBoxLayout(header);
-    headerLayout->setContentsMargins(14, 12, 14, 12);
-    headerLayout->setSpacing(3);
-
-    auto *eyebrow = new QLabel(QStringLiteral("连接"), header);
-    eyebrow->setObjectName(QStringLiteral("portListEyebrow"));
-    auto *titleRow = new QHBoxLayout;
-    auto *title = new QLabel(QStringLiteral("连接端口"), header);
-    title->setObjectName(QStringLiteral("portListTitle"));
-    auto *addButton = new QPushButton(QStringLiteral("＋ 端口"), header);
-    addButton->setObjectName(QStringLiteral("addPortButton"));
-    titleRow->addWidget(title);
-    titleRow->addStretch();
-    titleRow->addWidget(addButton);
-    headerLayout->addWidget(eyebrow);
-    headerLayout->addLayout(titleRow);
-
     auto *scrollArea = new QScrollArea(this);
     scrollArea->setObjectName(QStringLiteral("portListScrollArea"));
     scrollArea->setWidgetResizable(true);
@@ -242,10 +223,7 @@ ConnectionPortListView::ConnectionPortListView(QWidget *parent) : QWidget(parent
     m_itemLayout->setSpacing(12);
     scrollArea->setWidget(scrollContent);
 
-    mainLayout->addWidget(header);
     mainLayout->addWidget(scrollArea, 1);
-    connect(addButton, &QPushButton::clicked,
-            this, &ConnectionPortListView::addPortRequested);
 }
 
 void ConnectionPortListView::setModel(const QList<ConnectionPort> &ports,
@@ -264,7 +242,7 @@ void ConnectionPortListView::setModel(const QList<ConnectionPort> &ports,
     {
         m_selectedPortId.clear();
         auto *emptyLabel = new QLabel(
-            QStringLiteral("暂无连接端口\n点击上方“＋ 端口”创建"), this);
+            QStringLiteral("暂无连接端口\n点击工具栏“＋ 端口”创建"), this);
         emptyLabel->setObjectName(QStringLiteral("emptyPortHint"));
         emptyLabel->setAlignment(Qt::AlignCenter);
         m_itemLayout->addWidget(emptyLabel);
@@ -450,7 +428,6 @@ void ConnectionPortListView::focusPortPanel()
         "QWidget#connectionPortList {"
         "  border: 1px solid rgba(245,78,0,120);"
         "}"
-        "QWidget#connectionPortList QWidget#portListHeader,"
         "QWidget#connectionPortList QScrollArea#portListScrollArea,"
         "QWidget#connectionPortList QWidget#portListContent {"
         "  border: 0;"

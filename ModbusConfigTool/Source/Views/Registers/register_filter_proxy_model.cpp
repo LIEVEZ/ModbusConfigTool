@@ -1,4 +1,4 @@
-#include "register_filter_proxy_model.h"
+﻿#include "register_filter_proxy_model.h"
 
 RegisterFilterProxyModel::RegisterFilterProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)
@@ -24,9 +24,9 @@ bool RegisterFilterProxyModel::filterAcceptsRow(int sourceRow,
     {
     case SearchMode::Name: columns = {4}; break;
     case SearchMode::Address: columns = {2}; break;
-    case SearchMode::Category: columns = {9}; break;
-    case SearchMode::ProtocolKey: columns = {8}; break;
-    case SearchMode::All: columns = {0, 1, 2, 4, 5, 6, 8, 9, 10, 12}; break;
+    case SearchMode::Category: columns = {15}; break;
+    case SearchMode::ProtocolKey: columns = {14}; break;
+    case SearchMode::All: columns = {0, 1, 2, 4, 5, 6, 9, 10, 12, 14, 15, 16, 18}; break;
     default: break;
     }
     for (int column : columns)

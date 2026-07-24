@@ -17,7 +17,7 @@ QToolBar#workspaceToolBar {
     border: 0;
     border-bottom: 1px solid rgba(38, 37, 30, 24);
 }
-QLabel#groupCountBadge {
+QLabel#groupCountBadge, QLabel#portCountBadge {
     padding: 0 10px;
     border-radius: 10px;
     color: #f54e00;
@@ -128,7 +128,7 @@ QLabel#workspaceHintBadge {
     border: 1px solid rgba(38, 37, 30, 28);
     font-size: 12px;
 }
-QLabel#groupCountBadge {
+QLabel#groupCountBadge, QLabel#portCountBadge {
     padding: 0 10px;
     border-radius: 999px;
     color: rgba(38, 37, 30, 150);

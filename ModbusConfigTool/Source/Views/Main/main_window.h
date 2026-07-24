@@ -44,6 +44,8 @@ private:
     void openProject();
     bool saveProject(bool saveAs = false);
     void addGroup();
+    void importGroup();
+    QString uniqueGroupName(const QString &preferredName) const;
     void addPort();
     void editPort(const QString &portId);
     void removePort(const QString &portId);
@@ -60,7 +62,9 @@ private:
     void removeRegisters(const QStringList &registerIds);
     void showResult(const OperationResult &result, const QString &successMessage);
     void rebuildRecentMenu();
+    void tryOpenStartupProject();
     void updateGroupCount(int count);
+    void updatePortCount(int count);
 
     MainWindowViewModel *m_viewModel = nullptr;
     ConnectionPortListView *m_portListView = nullptr;
@@ -69,6 +73,7 @@ private:
     StatusBarView *m_statusView = nullptr;
     QToolBar *m_workspaceToolBar = nullptr;
     QLabel *m_groupCountBadge = nullptr;
+    QLabel *m_portCountBadge = nullptr;
     QSplitter *m_workspaceSplitter = nullptr;
     QMenu *m_recentMenu = nullptr;
     QHash<QString, RuntimeState> m_portStates;

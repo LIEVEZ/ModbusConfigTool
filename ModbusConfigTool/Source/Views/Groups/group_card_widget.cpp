@@ -283,6 +283,13 @@ bool GroupCardWidget::eventFilter(QObject *watched, QEvent *event)
         || watched == m_portCombo
         || watched == m_portView
         || watched == m_portViewport;
+    if (controlObject && event->type() == QEvent::ContextMenu)
+    {
+        auto *contextEvent = static_cast<QContextMenuEvent *>(event);
+        hideHoverTip();
+        emit contextMenuRequested(m_groupId, contextEvent->globalPos());
+        return true;
+    }
     if (controlObject && event->type() == QEvent::MouseButtonPress)
     {
         m_controlInteraction = true;

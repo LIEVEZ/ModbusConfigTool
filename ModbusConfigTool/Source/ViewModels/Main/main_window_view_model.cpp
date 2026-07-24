@@ -87,7 +87,51 @@ OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId, 
 {
     const CsvImportResult imported = m_csvGateway->importFile(path, document());
     if (!imported.result.success) { return imported.result; }
-    return m_registerService->importCsvIntoGroup(groupId, imported, replaceGroup);
+    OperationResult result = m_registerService->importCsvIntoGroup(groupId, imported, replaceGroup);
+    if (result.success)
+    {
+        if (!imported.result.message.isEmpty())
+        {
+            result.message = imported.result.message;
+        }
+        else
+        {
+            result.message = QStringLiteral("已导入 %1 条寄存器").arg(imported.registers.size());
+        }
+        result.detail = imported.result.detail;
+    }
+    return result;
+}
+
+OperationResult MainWindowViewModel::importGroupFromCsv(const QString &path, const RegisterGroup &group)
+{
+    const CsvImportResult imported = m_csvGateway->importFile(path, document());
+    if (!imported.result.success)
+    {
+        return imported.result;
+    }
+
+    OperationResult result = m_registerService->importCsvAsNewGroup(group, imported);
+    if (result.success)
+    {
+        if (result.message.isEmpty())
+        {
+            if (!imported.result.message.isEmpty())
+            {
+                result.message = imported.result.message;
+            }
+            else
+            {
+                result.message = QStringLiteral("已导入分组，共 %1 条寄存器")
+                                     .arg(imported.registers.size());
+            }
+        }
+        if (result.detail.isEmpty())
+        {
+            result.detail = imported.result.detail;
+        }
+    }
+    return result;
 }
 
 OperationResult MainWindowViewModel::exportGroupCsv(const QString &groupId, const QString &path) const

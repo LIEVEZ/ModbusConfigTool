@@ -42,18 +42,78 @@ OperationResult RegisterService::removeGroup(const QString &groupId, bool remove
     QString defaultId;
     for (int index = 0; index < candidate.groups.size(); ++index)
     {
-        if (candidate.groups.at(index).isDefault) { defaultId = candidate.groups.at(index).id; }
-        if (candidate.groups.at(index).id == groupId) { groupIndex = index; }
+        if (candidate.groups.at(index).isDefault)
+        {
+            defaultId = candidate.groups.at(index).id;
+        }
+        if (candidate.groups.at(index).id == groupId)
+        {
+            groupIndex = index;
+        }
     }
-    if (groupIndex < 0) { return OperationResult::fail(QStringLiteral("missing_group"), QStringLiteral("groupId"), QStringLiteral("分组不存在")); }
-    if (candidate.groups.at(groupIndex).isDefault) { return OperationResult::fail(QStringLiteral("default_group"), QStringLiteral("groupId"), QStringLiteral("默认分组不能删除")); }
+    if (groupIndex < 0)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("groupId"),
+                                     QStringLiteral("分组不存在"));
+    }
+
+    const bool removingDefault = candidate.groups.at(groupIndex).isDefault;
+
+    // 寄存器迁移目标：优先其他默认组，否则第一个其余分组；没有则删除寄存器
+    QString fallbackGroupId;
+    if (!defaultId.isEmpty() && defaultId != groupId)
+    {
+        fallbackGroupId = defaultId;
+    }
+    else
+    {
+        for (const RegisterGroup &group : candidate.groups)
+        {
+            if (group.id != groupId)
+            {
+                fallbackGroupId = group.id;
+                break;
+            }
+        }
+    }
+
     for (int index = candidate.registers.size() - 1; index >= 0; --index)
     {
-        if (candidate.registers.at(index).groupId != groupId) { continue; }
-        if (removePoints) { candidate.registers.removeAt(index); }
-        else { candidate.registers[index].groupId = defaultId; }
+        if (candidate.registers.at(index).groupId != groupId)
+        {
+            continue;
+        }
+        if (removePoints || fallbackGroupId.isEmpty())
+        {
+            candidate.registers.removeAt(index);
+        }
+        else
+        {
+            candidate.registers[index].groupId = fallbackGroupId;
+        }
     }
+
     candidate.groups.removeAt(groupIndex);
+
+    // 删除默认组后，若还有其他组则补一个默认标记
+    if (removingDefault && !candidate.groups.isEmpty())
+    {
+        bool hasDefault = false;
+        for (const RegisterGroup &group : candidate.groups)
+        {
+            if (group.isDefault)
+            {
+                hasDefault = true;
+                break;
+            }
+        }
+        if (!hasDefault)
+        {
+            candidate.groups[0].isDefault = true;
+        }
+    }
+
     m_projectService->editableDocument() = candidate;
     m_projectService->markDirty();
     return OperationResult::ok();
@@ -240,4 +300,78 @@ OperationResult RegisterService::importCsvIntoGroup(const QString &groupId,
     m_projectService->editableDocument() = candidate;
     m_projectService->markDirty();
     return OperationResult::ok();
+}
+
+OperationResult RegisterService::importCsvAsNewGroup(const RegisterGroup &group,
+                                                     const CsvImportResult &imported)
+{
+    if (!imported.result.success)
+    {
+        return imported.result;
+    }
+    if (imported.registers.isEmpty())
+    {
+        return OperationResult::fail(QStringLiteral("csv_empty"),
+                                     QStringLiteral("registers"),
+                                     QStringLiteral("CSV 未解析到有效寄存器点位"));
+    }
+
+    RegisterGroup added = group;
+    added.name = added.name.trimmed();
+    if (added.name.isEmpty())
+    {
+        return OperationResult::fail(QStringLiteral("empty_group"),
+                                     QStringLiteral("name"),
+                                     QStringLiteral("分组名称不能为空"));
+    }
+    if (added.id.isEmpty())
+    {
+        added.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
+    added.isDefault = false;
+
+    ProjectDocument candidate = m_projectService->document();
+    for (const RegisterGroup &existing : candidate.groups)
+    {
+        if (existing.name == added.name)
+        {
+            return OperationResult::fail(QStringLiteral("duplicate_group"),
+                                         QStringLiteral("name"),
+                                         QStringLiteral("分组名称不允许重复：%1").arg(added.name));
+        }
+        if (existing.id == added.id)
+        {
+            return OperationResult::fail(QStringLiteral("duplicate_group_id"),
+                                         QStringLiteral("id"),
+                                         QStringLiteral("分组 ID 已存在"));
+        }
+    }
+
+    if (added.canvasX == 0 && added.canvasY == 0)
+    {
+        const int index = candidate.groups.size();
+        added.canvasX = 40 + (index % 3) * 280;
+        added.canvasY = 40 + (index / 3) * 200;
+    }
+
+    candidate.groups.append(added);
+    for (RegisterPoint point : imported.registers)
+    {
+        point.groupId = added.id;
+        candidate.registers.append(point);
+    }
+
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success)
+    {
+        return validation;
+    }
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+
+    OperationResult result = OperationResult::ok();
+    result.message = QStringLiteral("已导入分组「%1」，共 %2 条寄存器")
+                         .arg(added.name)
+                         .arg(imported.registers.size());
+    return result;
 }

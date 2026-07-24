@@ -13,7 +13,11 @@
 #include "Views/Main/status_bar_view.h"
 
 #include <QCloseEvent>
+#include <QCoreApplication>
+#include <QDir>
+#include <QSet>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QLabel>
 #include <QMenu>
@@ -41,6 +45,7 @@ MainWindow::MainWindow(MainWindowViewModel *viewModel, QWidget *parent)
     buildToolBar();
     connectActions();
     refreshDocument();
+    tryOpenStartupProject();
     resize(1600, 900);
     setMinimumSize(1200, 700);
     setWindowTitle(QStringLiteral("Modbus 配置工具"));
@@ -72,6 +77,30 @@ void MainWindow::buildToolBar()
     m_groupCountBadge->setAlignment(Qt::AlignCenter);
     m_workspaceToolBar->addWidget(m_groupCountBadge);
 
+    QAction *addPortAction = m_workspaceToolBar->addAction(QStringLiteral("＋ 端口"));
+    addPortAction->setObjectName(QStringLiteral("addPortToolAction"));
+    if (auto *addPortButton = qobject_cast<QToolButton *>(
+            m_workspaceToolBar->widgetForAction(addPortAction)))
+    {
+        addPortButton->setObjectName(QStringLiteral("addPortToolButton"));
+        addPortButton->setFixedHeight(32);
+    }
+
+    m_portCountBadge = new QLabel(m_workspaceToolBar);
+    m_portCountBadge->setObjectName(QStringLiteral("portCountBadge"));
+    m_portCountBadge->setFixedHeight(32);
+    m_portCountBadge->setAlignment(Qt::AlignCenter);
+    m_workspaceToolBar->addWidget(m_portCountBadge);
+
+    QAction *importGroupAction = m_workspaceToolBar->addAction(QStringLiteral("导入分组"));
+    importGroupAction->setObjectName(QStringLiteral("importGroupToolAction"));
+    if (auto *importGroupButton = qobject_cast<QToolButton *>(
+            m_workspaceToolBar->widgetForAction(importGroupAction)))
+    {
+        importGroupButton->setObjectName(QStringLiteral("importGroupToolButton"));
+        importGroupButton->setFixedHeight(32);
+    }
+
     auto *spacer = new QWidget(m_workspaceToolBar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     spacer->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -86,6 +115,8 @@ void MainWindow::buildToolBar()
     m_workspaceToolBar->addWidget(hint);
 
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
+    connect(addPortAction, &QAction::triggered, this, &MainWindow::addPort);
+    connect(importGroupAction, &QAction::triggered, this, &MainWindow::importGroup);
 }
 
 MainWindow::~MainWindow() = default;
@@ -107,6 +138,8 @@ void MainWindow::buildMenus()
 
     QMenu *organization = menuBar()->addMenu(QStringLiteral("组织"));
     QAction *addGroupAction = organization->addAction(QStringLiteral("新增分组"));
+    QAction *importGroupMenuAction = organization->addAction(QStringLiteral("导入分组"));
+    importGroupMenuAction->setObjectName(QStringLiteral("importGroupMenuAction"));
 
     QMenu *connection = menuBar()->addMenu(QStringLiteral("连接配置"));
     connection->setObjectName(QStringLiteral("connectionConfigMenu"));
@@ -126,6 +159,7 @@ void MainWindow::buildMenus()
     connect(saveAsAction, &QAction::triggered, this, [this]() { saveProject(true); });
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
+    connect(importGroupMenuAction, &QAction::triggered, this, &MainWindow::importGroup);
     connect(addPortAction, &QAction::triggered, this, &MainWindow::addPort);
     connect(managePortsAction, &QAction::triggered, this, [this]() {
         if (m_portListView)
@@ -274,15 +308,7 @@ void MainWindow::connectActions()
         menu.addAction(QStringLiteral("导出 CSV"), this, [this, groupId]() { exportGroupCsv(groupId); });
         menu.addSeparator();
         menu.addAction(QStringLiteral("编辑分组"), this, [this, groupId]() { editGroup(groupId); });
-        QAction *delAction = menu.addAction(QStringLiteral("删除分组"), this, [this, groupId]() { removeGroup(groupId); });
-        for (const RegisterGroup &group : m_viewModel->document().groups)
-        {
-            if (group.id == groupId)
-            {
-                delAction->setEnabled(!group.isDefault);
-                break;
-            }
-        }
+        menu.addAction(QStringLiteral("删除分组"), this, [this, groupId]() { removeGroup(groupId); });
         menu.exec(globalPos);
     });
 
@@ -322,6 +348,7 @@ void MainWindow::refreshDocument()
     m_portListView->setModel(document.ports, document.groups, m_portStates);
     m_canvasView->setModel(document, m_portStates);
     updateGroupCount(document.groups.size());
+    updatePortCount(document.ports.size());
     if (!m_selectedGroupId.isEmpty())
     {
         m_canvasView->setSelectedGroup(m_selectedGroupId);
@@ -345,6 +372,14 @@ void MainWindow::updateGroupCount(int count)
     }
 }
 
+void MainWindow::updatePortCount(int count)
+{
+    if (m_portCountBadge)
+    {
+        m_portCountBadge->setText(QStringLiteral("%1 端口").arg(count));
+    }
+}
+
 bool MainWindow::confirmDiscardChanges()
 {
     if (!m_viewModel->isDirty()) { return true; }
@@ -355,6 +390,81 @@ bool MainWindow::confirmDiscardChanges()
 
 void MainWindow::newProject() { if (confirmDiscardChanges()) { m_viewModel->newProject(); } }
 
+void MainWindow::tryOpenStartupProject()
+{
+    const QStringList searchDirs = {
+        QCoreApplication::applicationDirPath(),
+        QDir::currentPath()
+    };
+    const QStringList preferredNames = {
+        QStringLiteral("ModbusConfigTool.mctproj"),
+        QStringLiteral("project.mctproj"),
+        QStringLiteral("default.mctproj")
+    };
+
+    QString chosenPath;
+    QSet<QString> seenDirs;
+    for (const QString &dirPath : searchDirs)
+    {
+        const QString absoluteDir = QDir(dirPath).absolutePath();
+        if (seenDirs.contains(absoluteDir))
+        {
+            continue;
+        }
+        seenDirs.insert(absoluteDir);
+
+        for (const QString &name : preferredNames)
+        {
+            const QString candidate = QDir(absoluteDir).filePath(name);
+            if (QFileInfo::exists(candidate))
+            {
+                chosenPath = candidate;
+                break;
+            }
+        }
+        if (!chosenPath.isEmpty())
+        {
+            break;
+        }
+
+        const QFileInfoList projects = QDir(absoluteDir).entryInfoList(
+            QStringList{QStringLiteral("*.mctproj")},
+            QDir::Files | QDir::Readable,
+            QDir::Time);
+        if (!projects.isEmpty())
+        {
+            chosenPath = projects.first().absoluteFilePath();
+            break;
+        }
+    }
+
+    if (chosenPath.isEmpty())
+    {
+        return;
+    }
+
+    const OperationResult result = m_viewModel->openProject(chosenPath);
+    if (result.success)
+    {
+        if (m_logView)
+        {
+            m_logView->appendMessage(
+                QStringLiteral("INFO"),
+                QStringLiteral("APP"),
+                QStringLiteral("已加载运行目录工程：%1").arg(chosenPath));
+        }
+        refreshStatus();
+        rebuildRecentMenu();
+    }
+    else if (m_logView)
+    {
+        m_logView->appendMessage(
+            QStringLiteral("WARN"),
+            QStringLiteral("APP"),
+            QStringLiteral("运行目录工程打开失败：%1（%2）")
+                .arg(result.message, chosenPath));
+    }
+}
 void MainWindow::openProject()
 {
     if (!confirmDiscardChanges()) { return; }
@@ -384,6 +494,96 @@ void MainWindow::addGroup()
     if (dialog.exec() == QDialog::Accepted)
     {
         showResult(m_viewModel->addGroup(dialog.group()), QStringLiteral("分组已新增"));
+    }
+}
+
+QString MainWindow::uniqueGroupName(const QString &preferredName) const
+{
+    QString base = preferredName.trimmed();
+    if (base.isEmpty())
+    {
+        base = QStringLiteral("导入分组");
+    }
+
+    const ProjectDocument &doc = m_viewModel->document();
+    auto nameExists = [&](const QString &name) {
+        for (const RegisterGroup &group : doc.groups)
+        {
+            if (group.name == name)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (!nameExists(base))
+    {
+        return base;
+    }
+
+    int suffix = 2;
+    QString candidate = QStringLiteral("%1_%2").arg(base).arg(suffix);
+    while (nameExists(candidate))
+    {
+        ++suffix;
+        candidate = QStringLiteral("%1_%2").arg(base).arg(suffix);
+    }
+    return candidate;
+}
+
+void MainWindow::importGroup()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("导入分组 CSV"),
+        QString(),
+        QStringLiteral("CSV 文件 (*.csv);;所有文件 (*.*)"));
+    if (path.isEmpty())
+    {
+        return;
+    }
+
+    static const QStringList palette = {
+        QStringLiteral("#f54e00"), QStringLiteral("#1f8a65"), QStringLiteral("#2f6feb"),
+        QStringLiteral("#c08532"), QStringLiteral("#8b5cf6"), QStringLiteral("#cf2d56")
+    };
+
+    RegisterGroup group;
+    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    group.name = uniqueGroupName(QFileInfo(path).completeBaseName());
+    group.color = palette.at(m_viewModel->document().groups.size() % palette.size());
+    group.enabled = true;
+    group.description = QStringLiteral("由 CSV 导入：%1").arg(QFileInfo(path).fileName());
+
+    GroupEditorDialog dialog(group, this);
+    dialog.setWindowTitle(QStringLiteral("导入分组"));
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+
+    RegisterGroup edited = dialog.group();
+    edited.id = group.id;
+    edited.isDefault = false;
+    edited.enabled = true;
+    edited.canvasX = 0;
+    edited.canvasY = 0;
+    if (edited.name.trimmed().isEmpty())
+    {
+        QMessageBox::warning(this, QStringLiteral("导入分组"), QStringLiteral("分组名称不能为空"));
+        return;
+    }
+
+    const OperationResult result = m_viewModel->importGroupFromCsv(path, edited);
+    const QString successMessage = result.message.isEmpty()
+        ? QStringLiteral("分组已导入")
+        : result.message;
+    showResult(result, successMessage);
+    if (result.success)
+    {
+        m_selectedGroupId = edited.id;
+        scheduleRefresh();
     }
 }
 
@@ -493,12 +693,34 @@ void MainWindow::editGroup(const QString &groupId)
 
 void MainWindow::removeGroup(const QString &groupId)
 {
-    if (QMessageBox::question(this, QStringLiteral("删除分组"),
-                              QStringLiteral("删除分组并将其中寄存器移动到默认分组？"))
-        == QMessageBox::Yes)
+    const RegisterGroup *target = nullptr;
+    for (const RegisterGroup &group : m_viewModel->document().groups)
     {
-        showResult(m_viewModel->removeGroup(groupId, false), QStringLiteral("分组已删除"));
+        if (group.id == groupId)
+        {
+            target = &group;
+            break;
+        }
     }
+    if (!target)
+    {
+        QMessageBox::warning(this, QStringLiteral("删除分组"), QStringLiteral("分组不存在或已被删除"));
+        return;
+    }
+
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+        this,
+        QStringLiteral("删除分组"),
+        QStringLiteral("确定删除分组「%1」吗？\n\n分组内寄存器将一并删除。")
+            .arg(target->name),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (answer != QMessageBox::Yes)
+    {
+        return;
+    }
+
+    showResult(m_viewModel->removeGroup(groupId, true), QStringLiteral("分组已删除"));
 }
 
 void MainWindow::importGroupCsv(const QString &groupId)
@@ -571,10 +793,24 @@ void MainWindow::removeRegisters(const QStringList &registerIds)
 
 void MainWindow::showResult(const OperationResult &result, const QString &successMessage)
 {
-    if (result.success) { m_statusView->showMessage(successMessage); m_logView->appendMessage(QStringLiteral("INFO"), QStringLiteral("APP"), successMessage); }
-    else { QMessageBox::warning(this, QStringLiteral("操作失败"), result.message); m_logView->appendMessage(QStringLiteral("WARNING"), QStringLiteral("APP"), result.message); }
+    if (result.success)
+    {
+        const QString message = result.message.isEmpty() ? successMessage : result.message;
+        m_statusView->showMessage(message);
+        m_logView->appendMessage(QStringLiteral("INFO"), QStringLiteral("APP"),
+                                 result.detail.isEmpty()
+                                     ? message
+                                     : QStringLiteral("%1（%2）").arg(message, result.detail));
+    }
+    else
+    {
+        const QString text = result.detail.isEmpty()
+                                 ? result.message
+                                 : QStringLiteral("%1\n%2").arg(result.message, result.detail);
+        QMessageBox::warning(this, QStringLiteral("操作失败"), text);
+        m_logView->appendMessage(QStringLiteral("WARNING"), QStringLiteral("APP"), result.message);
+    }
 }
-
 void MainWindow::rebuildRecentMenu()
 {
     if (!m_recentMenu) { return; }

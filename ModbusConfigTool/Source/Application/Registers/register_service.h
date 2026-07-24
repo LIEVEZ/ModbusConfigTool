@@ -26,6 +26,8 @@ public:
     OperationResult importCsvIntoGroup(const QString &groupId,
                                        const CsvImportResult &imported,
                                        bool replaceGroup);
+    OperationResult importCsvAsNewGroup(const RegisterGroup &group,
+                                        const CsvImportResult &imported);
 
 private:
     ProjectService *m_projectService = nullptr;

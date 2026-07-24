@@ -18,7 +18,7 @@
 
 namespace
 {
-const int kActionColumn = 13;
+const int kActionColumn = 19;
 
 QPushButton *makeRowButton(const QString &text, const QString &objectName, QWidget *parent)
 {
@@ -46,7 +46,7 @@ GroupRegisterConfigDialog::GroupRegisterConfigDialog(const QString &groupId,
 {
     setObjectName(QStringLiteral("groupRegisterConfigDialog"));
     setWindowTitle(QStringLiteral("寄存器配置"));
-    resize(960, 640);
+    resize(1280, 680);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 16, 16, 16);
@@ -110,6 +110,8 @@ GroupRegisterConfigDialog::GroupRegisterConfigDialog(const QString &groupId,
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->setShowGrid(false);
     m_table->setMouseTracking(true);
+    m_table->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     auto *footer = new QWidget(this);
     footer->setObjectName(QStringLiteral("groupConfigFooter"));
@@ -201,18 +203,28 @@ void GroupRegisterConfigDialog::refreshHeader(const ProjectDocument &doc)
 
 void GroupRegisterConfigDialog::applyColumnVisibility()
 {
-    // 原型列：从站/地址/数量/名称/类型/协议键/操作
-    static const QList<int> visibleColumns = {1, 2, 3, 4, 5, 8, kActionColumn};
+    // 对齐 CSV 导入字段：从站/地址/数量/名称/类型/编码/偏移/精度/单位/读码/写码/协议键/标签/启用/操作
+    static const QList<int> visibleColumns = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17, kActionColumn
+    };
     for (int column = 0; column < m_model->columnCount(); ++column)
     {
         m_table->setColumnHidden(column, !visibleColumns.contains(column));
     }
-    m_table->setColumnWidth(1, 70);
-    m_table->setColumnWidth(2, 80);
-    m_table->setColumnWidth(3, 60);
-    m_table->setColumnWidth(4, 160);
-    m_table->setColumnWidth(5, 90);
-    m_table->setColumnWidth(8, 140);
+    m_table->setColumnWidth(1, 60);
+    m_table->setColumnWidth(2, 70);
+    m_table->setColumnWidth(3, 50);
+    m_table->setColumnWidth(4, 180);
+    m_table->setColumnWidth(5, 80);
+    m_table->setColumnWidth(6, 70);
+    m_table->setColumnWidth(7, 60);
+    m_table->setColumnWidth(8, 50);
+    m_table->setColumnWidth(9, 60);
+    m_table->setColumnWidth(10, 70);
+    m_table->setColumnWidth(11, 70);
+    m_table->setColumnWidth(14, 150);
+    m_table->setColumnWidth(16, 90);
+    m_table->setColumnWidth(17, 50);
     m_table->setColumnWidth(kActionColumn, 140);
 }
 

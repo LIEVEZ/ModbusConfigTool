@@ -9,7 +9,7 @@ QPushButton:disabled { color: #999892; background: #e6e5e0; }
 QPushButton#primaryButton { color: white; background: #f54e00; border-color: #f54e00; }
 QPushButton#dangerButton { color: #cf2d56; background: rgba(207, 45, 86, 25); }
 QMenu::item:selected { background: #f3dfd4; }
-QPushButton#addPortButton, QToolButton#addGroupToolButton {
+QPushButton#addPortButton, QToolButton#addGroupToolButton, QToolButton#addPortToolButton {
     color: white;
     background: #f54e00;
     border-color: #f54e00;
