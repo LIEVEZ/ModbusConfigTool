@@ -44,6 +44,16 @@ build/
 Build/
 build-*/
 
+# qmake generated files
+Makefile
+Makefile.Debug
+Makefile.Release
+.qmake.stash
+object_script.*.Debug
+object_script.*.Release
+*.pro.user
+*.pro.user.*
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
