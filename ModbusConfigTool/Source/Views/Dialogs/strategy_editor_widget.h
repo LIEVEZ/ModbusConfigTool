@@ -1,4 +1,4 @@
-#ifndef STRATEGY_EDITOR_WIDGET_H
+﻿#ifndef STRATEGY_EDITOR_WIDGET_H
 #define STRATEGY_EDITOR_WIDGET_H
 
 #include "Domain/Models/strategy_spec.h"
@@ -8,6 +8,7 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QLabel;
 class QSpinBox;
 class QStackedWidget;
 
@@ -24,10 +25,13 @@ private:
     QWidget *createLinearPage();
     QWidget *createRandomPage();
     QWidget *createSinePage();
+    QWidget *createEmptyPage();
+    void refreshState();
 
     QComboBox *m_type = nullptr;
     QCheckBox *m_enabled = nullptr;
     QStackedWidget *m_pages = nullptr;
+    QLabel *m_hintLabel = nullptr;
     QDoubleSpinBox *m_linearStart = nullptr;
     QDoubleSpinBox *m_linearEnd = nullptr;
     QDoubleSpinBox *m_linearStep = nullptr;

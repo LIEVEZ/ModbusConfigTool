@@ -1,4 +1,4 @@
-QPushButton, QLineEdit, QComboBox, QSpinBox {
+﻿QPushButton, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
     background: #f7f7f4;
     border: 1px solid rgba(38, 37, 30, 30);
     border-radius: 8px;

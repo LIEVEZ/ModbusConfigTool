@@ -68,7 +68,13 @@ vcpkg_installed/
 Testing/
 .cache/
 Scripts/
-Tests/
+ModbusConfigTool/Tests/build/
+ModbusConfigTool/Tests/*.exe
+ModbusConfigTool/Tests/Makefile*
+ModbusConfigTool/Tests/.qmake.stash
 bin/
 docs/
 .superpowers/
+
+# test data files
+*.csv

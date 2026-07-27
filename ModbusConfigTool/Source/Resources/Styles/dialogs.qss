@@ -1,4 +1,4 @@
-QDialog { background: #f2f1ed; }
+﻿QDialog { background: #f2f1ed; }
 QDialog QLabel { background: transparent; }
 QDialogButtonBox QPushButton { min-width: 88px; }
 
@@ -34,4 +34,147 @@ QLabel#realtimeCountBadge {
     color: #f54e00;
     background: #f3dfd4;
     font-size: 12px;
+}
+
+/* Register editor dialog */
+QDialog#registerEditorDialog {
+    background: #f2f1ed;
+}
+
+QWidget#registerEditorHeader,
+QWidget#registerEditorFooter,
+QWidget#registerEditorContent,
+QWidget#registerEditorField,
+QScrollArea#registerEditorScroll,
+QScrollArea#registerEditorScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+QLabel#registerEditorTitle {
+    font: 600 22px "Bahnschrift", "Segoe UI", "Microsoft YaHei";
+    color: #26251e;
+    background: transparent;
+}
+
+QLabel#registerEditorSubtitle {
+    color: rgba(38, 37, 30, 145);
+    font-size: 12px;
+    background: transparent;
+}
+
+QCheckBox#registerEditorEnableToggle,
+QCheckBox#strategyEnableToggle {
+    spacing: 8px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 24);
+}
+
+QCheckBox#registerEditorEnableToggle::indicator,
+QCheckBox#strategyEnableToggle::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QWidget#registerEditorCard {
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 22);
+    border-radius: 14px;
+}
+
+QLabel#registerEditorCardTitle {
+    font: 600 14px "Segoe UI", "Microsoft YaHei";
+    color: #26251e;
+    background: transparent;
+}
+
+QLabel#registerEditorCardSubtitle,
+QLabel#registerEditorHint,
+QLabel#registerEditorFieldLabel {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+}
+
+QLabel#registerEditorCardSubtitle,
+QLabel#registerEditorHint {
+    font-size: 12px;
+}
+
+QLabel#registerEditorFieldLabel {
+    font-size: 12px;
+}
+
+QLabel#registerEditorReadonlyValue {
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #f7f7f4;
+    border: 1px solid rgba(38, 37, 30, 18);
+    color: rgba(38, 37, 30, 180);
+    font-family: Consolas, "Cascadia Mono", monospace;
+}
+
+QLabel#registerEditorUnitSuffix {
+    min-width: 28px;
+    color: rgba(38, 37, 30, 150);
+    background: transparent;
+    font-size: 12px;
+}
+
+QDialog#registerEditorDialog QLineEdit,
+QDialog#registerEditorDialog QComboBox,
+QDialog#registerEditorDialog QSpinBox,
+QDialog#registerEditorDialog QDoubleSpinBox {
+    min-height: 18px;
+    background: #f7f7f4;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 8px;
+    padding: 7px 10px;
+    selection-background-color: #f3dfd4;
+}
+
+QDialog#registerEditorDialog QLineEdit:focus,
+QDialog#registerEditorDialog QComboBox:focus,
+QDialog#registerEditorDialog QSpinBox:focus,
+QDialog#registerEditorDialog QDoubleSpinBox:focus {
+    border-color: #f54e00;
+    background: #ffffff;
+}
+
+QDialog#registerEditorDialog QPushButton {
+    min-height: 18px;
+    padding: 8px 14px;
+}
+
+QDialog#registerEditorDialog QPushButton#primaryButton {
+    min-width: 96px;
+}
+
+QWidget#strategyEditorWidget,
+QWidget#strategyEmptyPage,
+QWidget#strategyParamPage {
+    background: transparent;
+}
+
+QWidget#strategyEmptyPage,
+QWidget#strategyParamPage {
+    border: 1px dashed rgba(38, 37, 30, 28);
+    border-radius: 12px;
+    background: #fafaf7;
+}
+
+QLabel#strategyEmptyTitle {
+    font: 600 13px "Segoe UI", "Microsoft YaHei";
+    color: #26251e;
+    background: transparent;
+}
+
+QLabel#strategyEmptyHint {
+    color: rgba(38, 37, 30, 140);
+    font-size: 12px;
+    background: transparent;
+}
+
+QStackedWidget#strategyEditorPages {
+    background: transparent;
 }

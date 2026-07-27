@@ -1,0 +1,134 @@
+********* Start testing of ModbusRuntimeTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ModbusRuntimeTest::initTestCase()
+PASS   : ModbusRuntimeTest::tcpClientReadsHoldingRegister()
+PASS   : ModbusRuntimeTest::startsAndStopsSinglePortIndependently()
+PASS   : ModbusRuntimeTest::skipsPointsOfDisabledGroups()
+PASS   : ModbusRuntimeTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 280ms
+********* Finished testing of ModbusRuntimeTest *********
+********* Start testing of MainWindowTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : MainWindowTest::initTestCase()
+PASS   : MainWindowTest::containsGroupCanvasWorkspace()
+PASS   : MainWindowTest::placesGroupActionsAtToolbarLeft()
+PASS   : MainWindowTest::cardIsNotDeletedInsideItsClickHandler()
+PASS   : MainWindowTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 828ms
+********* Finished testing of MainWindowTest *********
+********* Start testing of CsvGatewayTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : CsvGatewayTest::initTestCase()
+PASS   : CsvGatewayTest::exportsAndImportsQuotedText()
+PASS   : CsvGatewayTest::importIntoGroupForcesGroupId()
+PASS   : CsvGatewayTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 7ms
+********* Finished testing of CsvGatewayTest *********
+********* Start testing of ProjectRepositoryTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ProjectRepositoryTest::initTestCase()
+PASS   : ProjectRepositoryTest::roundTripsUnsigned64WithoutPrecisionLoss()
+PASS   : ProjectRepositoryTest::migratesSchemaV1ToV2()
+PASS   : ProjectRepositoryTest::roundTripsV2PortsAndGroupCanvas()
+PASS   : ProjectRepositoryTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 11ms
+********* Finished testing of ProjectRepositoryTest *********
+********* Start testing of GroupRegisterConfigDialogTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : GroupRegisterConfigDialogTest::initTestCase()
+PASS   : GroupRegisterConfigDialogTest::refreshesRowsAfterDocumentChange()
+PASS   : GroupRegisterConfigDialogTest::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 17ms
+********* Finished testing of GroupRegisterConfigDialogTest *********
+********* Start testing of GroupCanvasViewTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : GroupCanvasViewTest::initTestCase()
+PASS   : GroupCanvasViewTest::expandsForRemoteCards()
+PASS   : GroupCanvasViewTest::forwardsCardEnabledRequest()
+PASS   : GroupCanvasViewTest::selectsCardOnPlainClick()
+PASS   : GroupCanvasViewTest::refreshesTooltipForRuntimeValue()
+PASS   : GroupCanvasViewTest::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 30ms
+********* Finished testing of GroupCanvasViewTest *********
+********* Start testing of GroupCardWidgetTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : GroupCardWidgetTest::initTestCase()
+PASS   : GroupCardWidgetTest::exposesEnabledAndPortControls()
+PASS   : GroupCardWidgetTest::emitsEnabledAndPortChanges()
+PASS   : GroupCardWidgetTest::controlsDoNotStartCardDragging()
+PASS   : GroupCardWidgetTest::portPopupUsesComboGlobalPosition()
+PASS   : GroupCardWidgetTest::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 559ms
+********* Finished testing of GroupCardWidgetTest *********
+********* Start testing of ConnectionPortListViewTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ConnectionPortListViewTest::initTestCase()
+PASS   : ConnectionPortListViewTest::displaysBindingCountAndRunningState()
+PASS   : ConnectionPortListViewTest::emitsStartOrStopFromRuntimeState()
+PASS   : ConnectionPortListViewTest::runtimeUpdateChangesToggleBehavior()
+PASS   : ConnectionPortListViewTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 7ms
+********* Finished testing of ConnectionPortListViewTest *********
+********* Start testing of ConnectionServiceTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ConnectionServiceTest::initTestCase()
+PASS   : ConnectionServiceTest::addPortAppendsAndAssignsId()
+PASS   : ConnectionServiceTest::removePortUnbindsGroups()
+PASS   : ConnectionServiceTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of ConnectionServiceTest *********
+********* Start testing of ValueConverterTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ValueConverterTest::initTestCase()
+PASS   : ValueConverterTest::convertsUnsigned32BigEndian()
+PASS   : ValueConverterTest::roundTripsFloatLittleSwap()
+PASS   : ValueConverterTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of ValueConverterTest *********
+********* Start testing of ValidationTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ValidationTest::initTestCase()
+PASS   : ValidationTest::rejectsOverlappingRanges()
+PASS   : ValidationTest::rejectsDuplicateProtocolKey()
+PASS   : ValidationTest::rejectsGroupBoundToMissingPort()
+PASS   : ValidationTest::rejectsDuplicatePortId()
+PASS   : ValidationTest::rejectsNegativeCanvasCoordinate()
+PASS   : ValidationTest::acceptsEmptyPortId()
+PASS   : ValidationTest::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 6ms
+********* Finished testing of ValidationTest *********
+********* Start testing of TableModelsTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : TableModelsTest::initTestCase()
+PASS   : TableModelsTest::exposesFourteenConfigurationColumns()
+PASS   : TableModelsTest::filtersByName()
+PASS   : TableModelsTest::exposesSevenRuntimeColumns()
+PASS   : TableModelsTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of TableModelsTest *********
+********* Start testing of StrategyEngineTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : StrategyEngineTest::initTestCase()
+PASS   : StrategyEngineTest::producesLinearValuesWhileRunning()
+PASS   : StrategyEngineTest::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 53ms
+********* Finished testing of StrategyEngineTest *********
+********* Start testing of RegisterValueTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : RegisterValueTest::initTestCase()
+PASS   : RegisterValueTest::preservesUnsigned64Precision()
+PASS   : RegisterValueTest::rejectsOutOfRangeSigned16()
+PASS   : RegisterValueTest::keepsFloatingPointType()
+PASS   : RegisterValueTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of RegisterValueTest *********
+********* Start testing of ProjectModelTest *********
+Config: Using QtTest library 5.14.2, Qt 5.14.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 7.3.0)
+PASS   : ProjectModelTest::initTestCase()
+PASS   : ProjectModelTest::createsExpectedDefaults()
+PASS   : ProjectModelTest::mapsDataTypeToRegisterCount()
+PASS   : ProjectModelTest::registerGroupHasCanvasAndBindingDefaults()
+PASS   : ProjectModelTest::connectionPortEmbedsServerProfileDefaults()
+PASS   : ProjectModelTest::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of ProjectModelTest *********
