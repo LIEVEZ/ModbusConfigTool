@@ -102,7 +102,7 @@ public:
     {
         m_title->setText(name);
         m_description->setText(description.isEmpty() ? QStringLiteral("无描述") : description);
-        m_count->setText(QStringLiteral("%1 条寄存器").arg(registerCount));
+        m_count->setText(QStringLiteral("寄存器数量 %1").arg(registerCount));
 
         QStringList runtimeLines;
         const int summaryCount = qMin(3, points.size());
@@ -215,21 +215,26 @@ GroupCardWidget::GroupCardWidget(const RegisterGroup &group,
 
     auto *countRow = new QHBoxLayout;
     countRow->setSpacing(6);
+    // 文案在前、数字在后：地址 N · 寄存器数量 N，数字同款大字体
+    m_slaveUnitLabel = new QLabel(QStringLiteral("地址"), this);
+    m_slaveUnitLabel->setObjectName(QStringLiteral("groupRegisterUnit"));
+    m_slaveLabel = new QLabel(slaveAddressNumberText(points), this);
+    m_slaveLabel->setObjectName(QStringLiteral("groupRegisterCount"));
+    auto *countUnit = new QLabel(QStringLiteral("寄存器数量"), this);
+    countUnit->setObjectName(QStringLiteral("groupRegisterUnit"));
     m_countLabel = new QLabel(QString::number(registerCount), this);
     m_countLabel->setObjectName(QStringLiteral("groupRegisterCount"));
-    auto *countUnit = new QLabel(QStringLiteral("寄存器"), this);
-    countUnit->setObjectName(QStringLiteral("groupRegisterUnit"));
-    makeMouseTransparent(m_countLabel);
+    makeMouseTransparent(m_slaveUnitLabel);
+    makeMouseTransparent(m_slaveLabel);
     makeMouseTransparent(countUnit);
-    countRow->addWidget(m_countLabel);
+    makeMouseTransparent(m_countLabel);
+    countRow->addWidget(m_slaveUnitLabel);
+    countRow->addWidget(m_slaveLabel);
+    countRow->addSpacing(8);
     countRow->addWidget(countUnit);
+    countRow->addWidget(m_countLabel);
     countRow->addStretch();
     contentLayout->addLayout(countRow);
-
-    auto *portLabel = new QLabel(QStringLiteral("通信端口"), this);
-    portLabel->setObjectName(QStringLiteral("groupPortLabel"));
-    makeMouseTransparent(portLabel);
-    contentLayout->addWidget(portLabel);
 
     auto *portRow = new QHBoxLayout;
     portRow->setSpacing(6);
@@ -325,6 +330,51 @@ void GroupCardWidget::setSelected(bool selected)
     refreshStyle();
 }
 
+
+QString GroupCardWidget::slaveAddressNumberText(const QList<RegisterPoint> &points)
+{
+    if (points.isEmpty())
+    {
+        return QStringLiteral("-");
+    }
+
+    const quint8 first = points.first().slaveAddress;
+    for (const RegisterPoint &point : points)
+    {
+        if (point.slaveAddress != first)
+        {
+            return QStringLiteral("*");
+        }
+    }
+    return QString::number(first);
+}
+
+QString GroupCardWidget::slaveAddressText(const QList<RegisterPoint> &points)
+{
+    if (points.isEmpty())
+    {
+        return QStringLiteral("地址-");
+    }
+
+    const quint8 first = points.first().slaveAddress;
+    for (const RegisterPoint &point : points)
+    {
+        if (point.slaveAddress != first)
+        {
+            return QStringLiteral("地址*");
+        }
+    }
+    return QStringLiteral("地址%1").arg(first);
+}
+
+void GroupCardWidget::refreshSlaveAddressLabel(const QList<RegisterPoint> &points)
+{
+    if (m_slaveLabel)
+    {
+        m_slaveLabel->setText(slaveAddressNumberText(points));
+    }
+}
+
 void GroupCardWidget::updateRegisterCount(int count)
 {
     m_registerCount = count;
@@ -336,6 +386,7 @@ void GroupCardWidget::updateRegisterCount(int count)
 
 void GroupCardWidget::updateRuntimeSummary(const QList<RegisterPoint> &points)
 {
+    refreshSlaveAddressLabel(points);
     rebuildHoverContent(points);
     if (m_hovering && !m_dragging && !m_controlInteraction)
     {
@@ -348,7 +399,9 @@ void GroupCardWidget::rebuildHoverContent(const QList<RegisterPoint> &points)
     QStringList lines;
     lines.append(m_name);
     lines.append(m_description.isEmpty() ? QStringLiteral("无描述") : m_description);
-    lines.append(QStringLiteral("%1 条寄存器").arg(m_registerCount));
+    lines.append(QStringLiteral("%1 · 寄存器数量 %2")
+                     .arg(slaveAddressText(points))
+                     .arg(m_registerCount));
     const int summaryCount = qMin(3, points.size());
     for (int index = 0; index < summaryCount; ++index)
     {

@@ -280,6 +280,51 @@ OperationResult RegisterService::setGroupPort(const QString &groupId, const QStr
     return OperationResult::ok();
 }
 
+OperationResult RegisterService::setGroupSlaveAddress(const QString &groupId, quint8 slaveAddress)
+{
+    if (slaveAddress < 1 || slaveAddress > 247)
+    {
+        return OperationResult::fail(QStringLiteral("invalid_slave"),
+                                     QStringLiteral("slaveAddress"),
+                                     QStringLiteral("从站地址必须位于 1～247"));
+    }
+
+    ProjectDocument candidate = m_projectService->document();
+    bool groupFound = false;
+    for (const RegisterGroup &group : candidate.groups)
+    {
+        if (group.id == groupId)
+        {
+            groupFound = true;
+            break;
+        }
+    }
+    if (!groupFound)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("groupId"),
+                                     QStringLiteral("分组不存在"));
+    }
+
+    for (RegisterPoint &point : candidate.registers)
+    {
+        if (point.groupId == groupId)
+        {
+            point.slaveAddress = slaveAddress;
+        }
+    }
+
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success)
+    {
+        return validation;
+    }
+
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+    return OperationResult::ok();
+}
+
 OperationResult RegisterService::moveGroup(const QString &groupId, int x, int y)
 {
     ProjectDocument candidate = m_projectService->document();

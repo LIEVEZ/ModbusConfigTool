@@ -110,9 +110,8 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
     setPortState(portId, RuntimeState::Starting);
     const QList<RegisterPoint> points = collectPointsForPort(document, portId);
     emit portDiagnostics(portId,
-                         QStringLiteral("准备启动：绑定启用分组点位 %1 个，端口从站=%2，%3 %4:%5")
+                         QStringLiteral("准备启动：绑定启用分组点位 %1 个，%2 %3:%4")
                              .arg(points.size())
-                             .arg(port->profile.slaveAddress)
                              .arg(port->profile.connectionType == ConnectionType::Tcp
                                       ? QStringLiteral("TCP")
                                       : QStringLiteral("RTU"))

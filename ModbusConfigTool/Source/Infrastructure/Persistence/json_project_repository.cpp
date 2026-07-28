@@ -118,7 +118,6 @@ QJsonObject portToJson(const ConnectionPort &port)
     object.insert(QStringLiteral("dataBits"), port.profile.dataBits);
     object.insert(QStringLiteral("stopBits"), port.profile.stopBits);
     object.insert(QStringLiteral("pollIntervalMs"), port.profile.pollIntervalMs);
-    object.insert(QStringLiteral("slaveAddress"), int(port.profile.slaveAddress));
     return object;
 }
 
@@ -136,7 +135,7 @@ ServerProfile profileFromJson(const QJsonObject &object)
     profile.dataBits = object.value(QStringLiteral("dataBits")).toInt(8);
     profile.stopBits = object.value(QStringLiteral("stopBits")).toInt(1);
     profile.pollIntervalMs = object.value(QStringLiteral("pollIntervalMs")).toInt(1000);
-    profile.slaveAddress = quint8(object.value(QStringLiteral("slaveAddress")).toInt(1));
+    // 端口不再绑定从站地址；旧工程中的 slaveAddress 字段忽略
     return profile;
 }
 

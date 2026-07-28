@@ -26,7 +26,10 @@ enum class Endian
 {
     Big,
     Little,
-    LittleSwap
+    LittleSwap,
+    BigSwap,
+    BigBcd,
+    LittleBcd
 };
 
 enum class StorageType

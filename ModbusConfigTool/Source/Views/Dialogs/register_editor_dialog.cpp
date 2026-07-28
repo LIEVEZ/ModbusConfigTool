@@ -131,11 +131,15 @@ RegisterEditorDialog::RegisterEditorDialog(const RegisterPoint &point,
     m_dataType = new QComboBox(commBody);
     m_dataType->addItems({
         QStringLiteral("INT16"), QStringLiteral("UINT16"), QStringLiteral("INT32"),
-        QStringLiteral("UINT32"), QStringLiteral("FLOAT32"), QStringLiteral("INT64"),
-        QStringLiteral("UINT64"), QStringLiteral("FLOAT64")
+        QStringLiteral("UINT32"), QStringLiteral("FLOAT32"), QStringLiteral("FLOAT"),
+        QStringLiteral("INT64"), QStringLiteral("UINT64"), QStringLiteral("FLOAT64"),
+        QStringLiteral("DFLOAT")
     });
     m_endian = new QComboBox(commBody);
-    m_endian->addItems({QStringLiteral("BIG"), QStringLiteral("LITTLE"), QStringLiteral("LITSWAP")});
+    m_endian->addItems({
+        QStringLiteral("BIG"), QStringLiteral("LITTLE"), QStringLiteral("LITSWAP"),
+        QStringLiteral("BIGSWAP"), QStringLiteral("BIGBCD"), QStringLiteral("LITBCD")
+    });
     m_registerCount = new QLabel(commBody);
     m_readCode = new QLabel(commBody);
     m_writeCode = new QLabel(commBody);

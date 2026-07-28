@@ -394,17 +394,24 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         point.protocolKey.clear();
         point.writeFunctionCode = 0;
 
+        // 从站地址非法或越界时不中断导入，统一回落为 1（有效范围 1～247）
         uint slaveValue = 1;
         if (hasAnyHeader(headers, slaveAliases))
         {
-            const QString slaveText = field(slaveAliases);
-            if (!slaveText.isEmpty() && !parseUIntFlexible(slaveText, &slaveValue))
+            const QString slaveText = field(slaveAliases).trimmed();
+            if (!slaveText.isEmpty())
             {
-                output.result = OperationResult::fail(
-                    QStringLiteral("invalid_slave"),
-                    QStringLiteral("slave_address"),
-                    QStringLiteral("CSV 第 %1 行从站地址无效").arg(lineNumber));
-                return output;
+                uint parsedSlave = 1;
+                if (parseUIntFlexible(slaveText, &parsedSlave)
+                    && parsedSlave >= 1
+                    && parsedSlave <= 247)
+                {
+                    slaveValue = parsedSlave;
+                }
+                else
+                {
+                    slaveValue = 1;
+                }
             }
         }
         point.slaveAddress = quint8(slaveValue);

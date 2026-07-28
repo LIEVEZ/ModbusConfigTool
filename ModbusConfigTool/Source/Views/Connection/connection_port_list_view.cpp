@@ -293,9 +293,8 @@ void ConnectionPortListView::setModel(const QList<ConnectionPort> &ports,
         connectionLabel->setMinimumWidth(0);
         connectionLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         auto *metaLabel = new QLabel(
-            QStringLiteral("轮询 %1 ms · 从站 %2 · 绑定 %3 分组")
+            QStringLiteral("轮询 %1 ms · 绑定 %2 分组")
                 .arg(port.profile.pollIntervalMs)
-                .arg(port.profile.slaveAddress)
                 .arg(countBindings(groups, port.id)), card);
         metaLabel->setObjectName(QStringLiteral("portMeta"));
         metaLabel->setWordWrap(true);

@@ -13,12 +13,6 @@ OperationResult ValidationService::validateServerProfile(const ServerProfile &pr
                                      QStringLiteral("pollIntervalMs"),
                                      QStringLiteral("轮询周期必须位于 100～60000 ms"));
     }
-    if (profile.slaveAddress < 1 || profile.slaveAddress > 247)
-    {
-        return OperationResult::fail(QStringLiteral("invalid_server_address"),
-                                     QStringLiteral("slaveAddress"),
-                                     QStringLiteral("服务器从站地址必须位于 1～247"));
-    }
     if (profile.connectionType == ConnectionType::Tcp && profile.tcpHost.trimmed().isEmpty())
     {
         return OperationResult::fail(QStringLiteral("empty_host"),

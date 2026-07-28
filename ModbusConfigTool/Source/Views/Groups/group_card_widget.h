@@ -62,6 +62,9 @@ private:
     void emitPendingPortChange();
     void refreshStyle();
     void rebuildHoverContent(const QList<RegisterPoint> &points);
+    void refreshSlaveAddressLabel(const QList<RegisterPoint> &points);
+    static QString slaveAddressText(const QList<RegisterPoint> &points);
+    static QString slaveAddressNumberText(const QList<RegisterPoint> &points);
     void showHoverTip(const QPoint &globalPos);
     void hideHoverTip();
     void applyPortLiveStyle();
@@ -83,6 +86,8 @@ private:
     QPoint m_dragStartPos;
     QString m_pendingPortId;
     bool m_portChangePending = false;
+    QLabel *m_slaveUnitLabel = nullptr;
+    QLabel *m_slaveLabel = nullptr;
     QLabel *m_countLabel = nullptr;
     QPushButton *m_enabledButton = nullptr;
     QLabel *m_portLiveDot = nullptr;

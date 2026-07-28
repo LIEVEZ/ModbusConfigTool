@@ -20,7 +20,26 @@ QString dataTypeToString(DataType type)
 
 bool dataTypeFromString(const QString &text, DataType *type)
 {
+    if (!type)
+    {
+        return false;
+    }
+
     const QString value = text.trimmed().toUpper();
+    // 兼容旧协议/CSV 别名
+    if (value == QStringLiteral("FLOAT") || value == QStringLiteral("FLOAT32"))
+    {
+        *type = DataType::Float32;
+        return true;
+    }
+    if (value == QStringLiteral("DFLOAT")
+        || value == QStringLiteral("FLOAT64")
+        || value == QStringLiteral("DOUBLE"))
+    {
+        *type = DataType::Float64;
+        return true;
+    }
+
     const QList<DataType> types = {DataType::Int16, DataType::UInt16, DataType::Int32,
                                    DataType::UInt32, DataType::Float32, DataType::Int64,
                                    DataType::UInt64, DataType::Float64};
@@ -42,16 +61,27 @@ QString endianToString(Endian endian)
     case Endian::Big: return QStringLiteral("BIG");
     case Endian::Little: return QStringLiteral("LITTLE");
     case Endian::LittleSwap: return QStringLiteral("LITSWAP");
+    case Endian::BigSwap: return QStringLiteral("BIGSWAP");
+    case Endian::BigBcd: return QStringLiteral("BIGBCD");
+    case Endian::LittleBcd: return QStringLiteral("LITBCD");
     default: return QStringLiteral("BIG");
     }
 }
 
 bool endianFromString(const QString &text, Endian *endian)
 {
+    if (!endian)
+    {
+        return false;
+    }
+
     const QString value = text.trimmed().toUpper();
     if (value == QStringLiteral("BIG")) { *endian = Endian::Big; return true; }
     if (value == QStringLiteral("LITTLE")) { *endian = Endian::Little; return true; }
     if (value == QStringLiteral("LITSWAP")) { *endian = Endian::LittleSwap; return true; }
+    if (value == QStringLiteral("BIGSWAP")) { *endian = Endian::BigSwap; return true; }
+    if (value == QStringLiteral("BIGBCD")) { *endian = Endian::BigBcd; return true; }
+    if (value == QStringLiteral("LITBCD")) { *endian = Endian::LittleBcd; return true; }
     return false;
 }
 

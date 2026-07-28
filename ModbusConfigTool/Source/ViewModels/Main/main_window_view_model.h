@@ -53,6 +53,7 @@ public:
     OperationResult updateGroup(const RegisterGroup &group);
     OperationResult setGroupEnabled(const QString &groupId, bool enabled);
     OperationResult setGroupPort(const QString &groupId, const QString &portId);
+    OperationResult setGroupSlaveAddress(const QString &groupId, quint8 slaveAddress);
     OperationResult moveGroup(const QString &groupId, int x, int y);
     OperationResult removeGroup(const QString &groupId, bool removePoints);
 

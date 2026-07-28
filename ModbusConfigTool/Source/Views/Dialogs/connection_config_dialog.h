@@ -28,7 +28,6 @@ private:
     QComboBox *m_baudRate = nullptr;
     QComboBox *m_parity = nullptr;
     QSpinBox *m_pollInterval = nullptr;
-    QSpinBox *m_slaveAddress = nullptr;
     QString m_originalId;
 };
 

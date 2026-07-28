@@ -88,6 +88,13 @@ OperationResult MainWindowViewModel::setGroupPort(const QString &groupId, const 
     if (result.success) { syncRuntimeMaps(); }
     return result;
 }
+
+OperationResult MainWindowViewModel::setGroupSlaveAddress(const QString &groupId, quint8 slaveAddress)
+{
+    const OperationResult result = m_registerService->setGroupSlaveAddress(groupId, slaveAddress);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 OperationResult MainWindowViewModel::moveGroup(const QString &groupId, int x, int y) { return m_registerService->moveGroup(groupId, x, y); }
 OperationResult MainWindowViewModel::removeGroup(const QString &groupId, bool removePoints)
 {

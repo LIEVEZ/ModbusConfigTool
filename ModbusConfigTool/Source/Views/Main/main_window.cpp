@@ -23,6 +23,7 @@
 #include <QFrame>
 #include <QLabel>
 #include <QKeySequence>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -336,6 +337,7 @@ void MainWindow::connectActions()
         menu.addAction(QStringLiteral("导出 CSV"), this, [this, groupId]() { exportGroupCsv(groupId); });
         menu.addSeparator();
         menu.addAction(QStringLiteral("编辑分组"), this, [this, groupId]() { editGroup(groupId); });
+        menu.addAction(QStringLiteral("修改从站地址"), this, [this, groupId]() { editGroupSlaveAddress(groupId); });
         menu.addAction(QStringLiteral("删除分组"), this, [this, groupId]() { removeGroup(groupId); });
         menu.exec(globalPos);
     });
@@ -868,6 +870,58 @@ void MainWindow::editGroup(const QString &groupId)
             return;
         }
     }
+}
+
+void MainWindow::editGroupSlaveAddress(const QString &groupId)
+{
+    const ProjectDocument document = m_viewModel->document();
+    QString groupName = groupId;
+    for (const RegisterGroup &group : document.groups)
+    {
+        if (group.id == groupId)
+        {
+            groupName = group.name;
+            break;
+        }
+    }
+
+    int currentSlave = 1;
+    bool hasPoint = false;
+    for (const RegisterPoint &point : document.registers)
+    {
+        if (point.groupId != groupId)
+        {
+            continue;
+        }
+        if (!hasPoint)
+        {
+            currentSlave = int(point.slaveAddress);
+            hasPoint = true;
+        }
+        else if (int(point.slaveAddress) != currentSlave)
+        {
+            // 组内不一致时，对话框默认仍用第一个点的值
+            break;
+        }
+    }
+
+    bool ok = false;
+    const int slave = QInputDialog::getInt(
+        this,
+        QStringLiteral("修改从站地址"),
+        QStringLiteral("将分组「%1」内全部寄存器的从站地址改为：").arg(groupName),
+        currentSlave,
+        1,
+        247,
+        1,
+        &ok);
+    if (!ok)
+    {
+        return;
+    }
+
+    showResult(m_viewModel->setGroupSlaveAddress(groupId, quint8(slave)),
+               QStringLiteral("已将分组「%1」从站地址批量改为 %2").arg(groupName).arg(slave));
 }
 
 void MainWindow::removeGroup(const QString &groupId)

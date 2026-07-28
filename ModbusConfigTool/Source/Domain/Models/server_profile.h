@@ -16,7 +16,6 @@ struct ServerProfile
     int dataBits = 8;
     int stopBits = 1;
     int pollIntervalMs = 1000;
-    quint8 slaveAddress = 1;
 };
 
 #endif

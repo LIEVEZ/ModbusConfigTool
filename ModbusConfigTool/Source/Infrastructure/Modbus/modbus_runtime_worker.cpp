@@ -14,6 +14,21 @@ namespace
 {
 using FrameHandler = std::function<void(const CommFrame &)>;
 
+
+quint8 serverAddressFromPoints(const QList<RegisterPoint> &points)
+{
+    // 端口不绑定从站：运行时从点位推导，供 QModbusServer 过滤请求
+    for (const RegisterPoint &point : points)
+    {
+        if (point.slaveAddress >= 1 && point.slaveAddress <= 247)
+        {
+            return point.slaveAddress;
+        }
+    }
+    return 1;
+}
+
+
 class BlockModbusTcpServer : public QModbusTcpServer
 {
 public:
@@ -140,7 +155,7 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
     m_server = profile.connectionType == ConnectionType::Tcp
         ? static_cast<QModbusServer *>(new BlockModbusTcpServer(&m_store, frameHandler, this))
         : static_cast<QModbusServer *>(new BlockModbusRtuSlave(&m_store, frameHandler, this));
-    m_server->setServerAddress(profile.slaveAddress);
+    m_server->setServerAddress(serverAddressFromPoints(points));
 
     rebuildMap(points, false);
     if (m_points.isEmpty() || m_store.isEmpty())
@@ -225,10 +240,14 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
     for (const RegisterPoint &point : points)
     {
         // 点位启用字段已废弃，全部参与映射。
+        // 从站地址保留点位自身配置，不再由端口覆盖。
         RegisterPoint mapped = point;
         mapped.enabled = true;
         mapped.registerCount = quint16(qMax(1, int(point.registerCount)));
-        mapped.slaveAddress = m_profile.slaveAddress;
+        if (mapped.slaveAddress < 1 || mapped.slaveAddress > 247)
+        {
+            mapped.slaveAddress = 1;
+        }
         m_points.insert(mapped.id, mapped);
         enabledPoints.append(mapped);
     }
@@ -268,7 +287,7 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
         appendCover(QModbusDataUnit::HoldingRegisters, StorageType::Holding);
         appendCover(QModbusDataUnit::InputRegisters, StorageType::Input);
         m_server->setMap(map);
-        m_server->setServerAddress(m_profile.slaveAddress);
+        m_server->setServerAddress(serverAddressFromPoints(enabledPoints));
     }
 
     if (!restartStrategy || m_points.isEmpty())
