@@ -38,7 +38,7 @@ signals:
     void dragStarted(const QString &groupId, const QPoint &offset);
     void dragging(const QString &groupId, const QPoint &globalPos);
     void dragFinished(const QString &groupId);
-    void clicked(const QString &groupId);
+    void clicked(const QString &groupId, Qt::KeyboardModifiers modifiers);
     void doubleClicked(const QString &groupId);
     void contextMenuRequested(const QString &groupId, const QPoint &globalPos);
     void enabledChangeRequested(const QString &groupId, bool enabled);

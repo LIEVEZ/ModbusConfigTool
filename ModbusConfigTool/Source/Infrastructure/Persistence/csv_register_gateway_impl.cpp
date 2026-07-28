@@ -527,6 +527,8 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             }
         }
 
+        // 仅检查本文件内地址重叠；跨分组冲突交给工程校验
+        // （同端口且同时启用才报错，未绑定端口不拦截）
         bool overlapped = false;
         for (const RegisterPoint &existing : output.registers)
         {
@@ -537,24 +539,12 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
                 break;
             }
         }
-        if (!overlapped)
-        {
-            for (const RegisterPoint &existing : current.registers)
-            {
-                if (rangesOverlap(point.slaveAddress, point.storageType, point.address,
-                                  point.registerCount, existing))
-                {
-                    overlapped = true;
-                    break;
-                }
-            }
-        }
         if (overlapped)
         {
             ++skippedRows;
             if (skipNotes.size() < 8)
             {
-                skipNotes.append(QStringLiteral("第%1行：地址 %2 与已有点重叠，已跳过")
+                skipNotes.append(QStringLiteral("第%1行：地址 %2 与本文件内已有点重叠，已跳过")
                                      .arg(lineNumber)
                                      .arg(point.address));
             }
@@ -574,17 +564,26 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         return output;
     }
 
-    ProjectDocument candidate = current;
-    candidate.groups = output.groups;
-    candidate.registers += output.registers;
-    output.result = ValidationService::validateProject(candidate);
-    if (output.result.success && skippedRows > 0)
+    // 逐点基础校验；跨组/同端口冲突由 RegisterService 合入工程后再 validateProject
+    for (const RegisterPoint &point : output.registers)
     {
-        output.result.message = QStringLiteral("已导入 %1 条，跳过 %2 条")
+        const OperationResult pointResult = ValidationService::validateRegister(point);
+        if (!pointResult.success)
+        {
+            output.result = pointResult;
+            return output;
+        }
+    }
+
+    output.result = OperationResult::ok();
+    if (skippedRows > 0)
+    {
+        output.result.message = QStringLiteral("已解析 %1 条，跳过 %2 条")
                                     .arg(output.registers.size())
                                     .arg(skippedRows);
         output.result.detail = skipNotes.join(QLatin1Char(';'));
     }
+    Q_UNUSED(current);
     return output;
 }
 

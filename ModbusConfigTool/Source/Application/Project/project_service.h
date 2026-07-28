@@ -2,8 +2,11 @@
 #define PROJECT_SERVICE_H
 
 #include "Domain/Interfaces/project_repository.h"
+#include "Domain/Values/register_value.h"
 
+#include <QList>
 #include <QObject>
+#include <QPair>
 
 class ProjectService : public QObject
 {
@@ -24,6 +27,7 @@ public:
     OperationResult saveAs(const QString &path);
     void markDirty();
     void updateRuntimeValue(const QString &pointId, const RegisterValue &value);
+    void updateRuntimeValues(const QList<QPair<QString, RegisterValue>> &values);
     void removeRecentFile(const QString &path);
 
 signals:

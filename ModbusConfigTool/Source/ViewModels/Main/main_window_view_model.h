@@ -7,8 +7,11 @@
 #include "Domain/Models/project_document.h"
 #include "Domain/Models/connection_port.h"
 #include "Domain/Values/operation_result.h"
+#include "Domain/Values/register_value.h"
 
+#include <QList>
 #include <QObject>
+#include <QPair>
 
 class CsvRegisterGatewayImpl;
 class JsonProjectRepository;
@@ -68,6 +71,7 @@ public:
 
     // 运行时写点位
     void writePoint(const QString &pointId, const RegisterValue &value);
+    void writePoints(const QList<QPair<QString, RegisterValue>> &values);
 
 signals:
     void documentChanged();
@@ -80,6 +84,8 @@ signals:
     void runtimeValueChanged(const QString &pointId);
 
 private:
+    void syncRuntimeMaps();
+
     JsonProjectRepository *m_repository = nullptr;
     CsvRegisterGatewayImpl *m_csvGateway = nullptr;
     ProjectService *m_projectService = nullptr;

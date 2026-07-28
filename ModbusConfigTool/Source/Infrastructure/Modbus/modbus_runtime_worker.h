@@ -20,6 +20,7 @@ public:
 
 public slots:
     void start(const ServerProfile &profile, const QList<RegisterPoint> &points);
+    void reloadPoints(const QList<RegisterPoint> &points);
     void stop();
     void writePoint(const QString &pointId, const RegisterValue &value);
 
@@ -33,9 +34,11 @@ signals:
 
 private:
     void handleDataWritten(QModbusDataUnit::RegisterType table, int address, int size);
+    void rebuildMap(const QList<RegisterPoint> &points, bool restartStrategy);
 
     QModbusServer *m_server = nullptr;
     StrategyEngine *m_strategyEngine = nullptr;
+    ServerProfile m_profile;
     QHash<QString, RegisterPoint> m_points;
     ModbusRegisterStore m_store;
 };

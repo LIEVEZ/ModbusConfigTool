@@ -237,10 +237,30 @@ OperationResult RegisterService::updateGroup(const RegisterGroup &group)
 OperationResult RegisterService::setGroupEnabled(const QString &groupId, bool enabled)
 {
     ProjectDocument candidate = m_projectService->document();
+    bool found = false;
     for (RegisterGroup &group : candidate.groups)
     {
-        if (group.id == groupId) { group.enabled = enabled; break; }
+        if (group.id == groupId)
+        {
+            group.enabled = enabled;
+            found = true;
+            break;
+        }
     }
+    if (!found)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("groupId"),
+                                     QStringLiteral("分组不存在"));
+    }
+
+    // 启用时需检查：同端口其他启用分组是否地址冲突
+    const OperationResult validation = ValidationService::validateProject(candidate);
+    if (!validation.success)
+    {
+        return validation;
+    }
+
     m_projectService->editableDocument() = candidate;
     m_projectService->markDirty();
     return OperationResult::ok();

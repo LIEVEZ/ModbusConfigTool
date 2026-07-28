@@ -475,7 +475,7 @@ void GroupCardWidget::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && m_pressedForDrag)
     {
         m_pressedForDrag = false;
-        emit clicked(m_groupId);
+        emit clicked(m_groupId, event->modifiers());
         event->accept();
         return;
     }

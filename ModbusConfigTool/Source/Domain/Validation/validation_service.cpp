@@ -2,6 +2,7 @@
 
 #include "Domain/Models/project_factory.h"
 
+#include <QHash>
 #include <QSet>
 
 OperationResult ValidationService::validateServerProfile(const ServerProfile &profile)
@@ -35,12 +36,7 @@ OperationResult ValidationService::validateServerProfile(const ServerProfile &pr
 
 OperationResult ValidationService::validateRegister(const RegisterPoint &point)
 {
-    if (point.name.trimmed().isEmpty())
-    {
-        return OperationResult::fail(QStringLiteral("empty_name"),
-                                     QStringLiteral("name"),
-                                     QStringLiteral("寄存器名称不能为空"));
-    }
+    // 寄存器名称允许为空（CSV 未填时保持空白）。
     // 协议键允许为空（CSV 未填时保持空白，不做默认生成）。
     if (point.slaveAddress < 1 || point.slaveAddress > 247)
     {
@@ -154,6 +150,19 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
         }
     }
 
+    QHash<QString, const RegisterGroup *> groupById;
+    for (const RegisterGroup &group : document.groups)
+    {
+        groupById.insert(group.id, &group);
+    }
+
+    auto rangesOverlap = [](quint16 leftAddress, quint16 leftCount,
+                            quint16 rightAddress, quint16 rightCount) -> bool {
+        const quint32 leftEnd = quint32(leftAddress) + leftCount - 1U;
+        const quint32 rightEnd = quint32(rightAddress) + rightCount - 1U;
+        return leftAddress <= rightEnd && rightAddress <= leftEnd;
+    };
+
     for (int index = 0; index < document.registers.size(); ++index)
     {
         const RegisterPoint &point = document.registers.at(index);
@@ -166,7 +175,7 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                                          QStringLiteral("寄存器引用的分组不存在"));
         }
 
-
+        const RegisterGroup *pointGroup = groupById.value(point.groupId, nullptr);
         const quint32 pointEnd = quint32(point.address) + point.registerCount - 1U;
         if (pointEnd > 65535U)
         {
@@ -174,21 +183,80 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                                          QStringLiteral("address"),
                                          QStringLiteral("寄存器地址范围超出 65535"));
         }
+
         for (int otherIndex = 0; otherIndex < index; ++otherIndex)
         {
             const RegisterPoint &other = document.registers.at(otherIndex);
-            if (other.slaveAddress != point.slaveAddress
-                || other.storageType != point.storageType)
+            if (other.storageType != point.storageType)
             {
                 continue;
             }
-            const quint32 otherEnd = quint32(other.address) + other.registerCount - 1U;
-            if (point.address <= otherEnd && other.address <= pointEnd)
+            if (!rangesOverlap(point.address, point.registerCount,
+                               other.address, other.registerCount))
             {
-                return OperationResult::fail(QStringLiteral("address_overlap"),
-                                             QStringLiteral("address"),
-                                             QStringLiteral("寄存器地址范围发生重叠"));
+                continue;
             }
+
+            const RegisterGroup *otherGroup = groupById.value(other.groupId, nullptr);
+            const bool sameGroup = (point.groupId == other.groupId);
+
+            if (sameGroup)
+            {
+                // 同组内仍按从站+地址范围隔离检查
+                if (other.slaveAddress != point.slaveAddress)
+                {
+                    continue;
+                }
+                return OperationResult::fail(
+                    QStringLiteral("address_overlap"),
+                    QStringLiteral("address"),
+                    QStringLiteral("同组内寄存器地址范围重叠"),
+                    QStringLiteral("分组「%1」：从站 %2，地址 %3 与 %4 重叠")
+                        .arg(pointGroup ? pointGroup->name : point.groupId)
+                        .arg(point.slaveAddress)
+                        .arg(point.address)
+                        .arg(other.address));
+            }
+
+            // 跨组：仅当两边都启用，且绑定同一非空端口时才冲突
+            // 未绑定端口（portId 为空）不参与跨组冲突检查
+            if (!pointGroup || !otherGroup)
+            {
+                continue;
+            }
+            if (!pointGroup->enabled || !otherGroup->enabled)
+            {
+                continue;
+            }
+            if (pointGroup->portId.isEmpty() || otherGroup->portId.isEmpty())
+            {
+                continue;
+            }
+            if (pointGroup->portId != otherGroup->portId)
+            {
+                continue;
+            }
+
+            QString portName = pointGroup->portId;
+            for (const ConnectionPort &port : document.ports)
+            {
+                if (port.id == pointGroup->portId)
+                {
+                    portName = port.name;
+                    break;
+                }
+            }
+
+            return OperationResult::fail(
+                QStringLiteral("address_overlap"),
+                QStringLiteral("address"),
+                QStringLiteral("同端口启用分组存在地址重叠"),
+                QStringLiteral("端口「%1」上，分组「%2」地址 %3 与分组「%4」地址 %5 重叠（均已启用）")
+                    .arg(portName,
+                         pointGroup->name,
+                         QString::number(point.address),
+                         otherGroup->name,
+                         QString::number(other.address)));
         }
     }
     return OperationResult::ok();

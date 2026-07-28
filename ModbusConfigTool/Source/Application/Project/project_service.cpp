@@ -3,6 +3,7 @@
 #include "Domain/Models/project_factory.h"
 
 #include <QFileInfo>
+#include <QHash>
 #include <QSettings>
 
 ProjectService::ProjectService(ProjectRepository *repository, QObject *parent)
@@ -34,6 +35,14 @@ OperationResult ProjectService::open(const QString &path)
     if (!loaded.result.success) { return loaded.result; }
     m_document = loaded.document;
     m_filePath = path;
+    // 旧工程可能仍是默认名“未命名工程”：打开时用文件名纠正显示/后续保存
+    const QString fileTitle = QFileInfo(path).completeBaseName().trimmed();
+    if (!fileTitle.isEmpty()
+        && (m_document.project.name.trimmed().isEmpty()
+            || m_document.project.name.trimmed() == QStringLiteral("未命名工程")))
+    {
+        m_document.project.name = fileTitle;
+    }
     addRecentFile(path);
     setDirty(false);
     emit documentChanged();
@@ -52,6 +61,14 @@ OperationResult ProjectService::save()
 
 OperationResult ProjectService::saveAs(const QString &path)
 {
+    // 另存为时若仍是默认名，同步为文件名（不含扩展名）
+    const QString fileTitle = QFileInfo(path).completeBaseName().trimmed();
+    if (!fileTitle.isEmpty()
+        && (m_document.project.name.trimmed().isEmpty()
+            || m_document.project.name.trimmed() == QStringLiteral("未命名工程")))
+    {
+        m_document.project.name = fileTitle;
+    }
     m_document.project.updatedAt = QDateTime::currentDateTime();
     const OperationResult result = m_repository->save(path, m_document);
     if (result.success)
@@ -59,6 +76,7 @@ OperationResult ProjectService::saveAs(const QString &path)
         m_filePath = path;
         addRecentFile(path);
         setDirty(false);
+        emit documentChanged();
     }
     return result;
 }
@@ -96,10 +114,48 @@ void ProjectService::updateRuntimeValue(const QString &pointId,
         if (point.id == pointId)
         {
             point.currentValue = value;
+            // 仅标记脏，不发 documentChanged，避免整窗体重刷
+            setDirty(true);
             emit runtimeValueChanged(pointId);
             return;
         }
     }
+}
+
+void ProjectService::updateRuntimeValues(const QList<QPair<QString, RegisterValue>> &values)
+{
+    if (values.isEmpty())
+    {
+        return;
+    }
+
+    QHash<QString, RegisterValue> valueMap;
+    valueMap.reserve(values.size());
+    for (const auto &item : values)
+    {
+        valueMap.insert(item.first, item.second);
+    }
+
+    bool changed = false;
+    for (RegisterPoint &point : m_document.registers)
+    {
+        const auto it = valueMap.constFind(point.id);
+        if (it == valueMap.cend())
+        {
+            continue;
+        }
+        point.currentValue = it.value();
+        changed = true;
+    }
+
+    if (!changed)
+    {
+        return;
+    }
+
+    setDirty(true);
+    // 空 id 表示批量刷新
+    emit runtimeValueChanged(QString());
 }
 
 void ProjectService::setDirty(bool dirty)

@@ -131,8 +131,7 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
                                 const QList<RegisterPoint> &points)
 {
     stop();
-    m_store.clear();
-    m_points.clear();
+    m_profile = profile;
 
     FrameHandler frameHandler = [this](const CommFrame &frame) {
         emit frameCaptured(frame);
@@ -143,31 +142,7 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
         : static_cast<QModbusServer *>(new BlockModbusRtuSlave(&m_store, frameHandler, this));
     m_server->setServerAddress(profile.slaveAddress);
 
-    QList<RegisterPoint> enabledPoints;
-    for (const RegisterPoint &point : points)
-    {
-        // 点位启用字段已废弃，全部参与映射。
-        RegisterPoint mapped = point;
-        mapped.enabled = true;
-        mapped.registerCount = quint16(qMax(1, int(point.registerCount)));
-        mapped.slaveAddress = profile.slaveAddress;
-        m_points.insert(mapped.id, mapped);
-        enabledPoints.append(mapped);
-    }
-
-    m_store.build(enabledPoints, StorageType::Holding);
-    m_store.build(enabledPoints, StorageType::Input);
-
-    const QString mapSummary = QStringLiteral(
-        "收到点位 %1，映射 %2；Holding %3 块 %4；Input %5 块 %6")
-        .arg(points.size())
-        .arg(m_points.size())
-        .arg(m_store.blockCount(QModbusDataUnit::HoldingRegisters))
-        .arg(m_store.summary(QModbusDataUnit::HoldingRegisters))
-        .arg(m_store.blockCount(QModbusDataUnit::InputRegisters))
-        .arg(m_store.summary(QModbusDataUnit::InputRegisters));
-    emit diagnostics(mapSummary);
-
+    rebuildMap(points, false);
     if (m_points.isEmpty() || m_store.isEmpty())
     {
         emit failed(QStringLiteral("寄存器映射为空"),
@@ -176,28 +151,6 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
         stop();
         return;
     }
-
-    QModbusDataUnitMap map;
-    auto appendCover = [&](QModbusDataUnit::RegisterType table, StorageType storageType) {
-        int start = 65536;
-        int end = -1;
-        for (const RegisterPoint &point : enabledPoints)
-        {
-            if (point.storageType != storageType)
-            {
-                continue;
-            }
-            start = qMin(start, int(point.address));
-            end = qMax(end, int(point.address) + int(point.registerCount) - 1);
-        }
-        if (end >= start)
-        {
-            map.insert(table, QModbusDataUnit(table, start, quint16(end - start + 1)));
-        }
-    };
-    appendCover(QModbusDataUnit::HoldingRegisters, StorageType::Holding);
-    appendCover(QModbusDataUnit::InputRegisters, StorageType::Input);
-    m_server->setMap(map);
 
     if (profile.connectionType == ConnectionType::Tcp)
     {
@@ -231,11 +184,102 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
         return;
     }
 
+    if (m_strategyEngine)
+    {
+        m_strategyEngine->stop();
+        delete m_strategyEngine;
+        m_strategyEngine = nullptr;
+    }
     m_strategyEngine = new StrategyEngine(this);
     connect(m_strategyEngine, &StrategyEngine::valueReady,
             this, &ModbusRuntimeWorker::writePoint);
     m_strategyEngine->start(m_points.values());
     emit started();
+}
+
+void ModbusRuntimeWorker::reloadPoints(const QList<RegisterPoint> &points)
+{
+    if (!m_server)
+    {
+        return;
+    }
+
+    rebuildMap(points, true);
+    emit diagnostics(QStringLiteral("寄存器映射已热更新（连接保持）"));
+}
+
+void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool restartStrategy)
+{
+    if (m_strategyEngine)
+    {
+        m_strategyEngine->stop();
+        delete m_strategyEngine;
+        m_strategyEngine = nullptr;
+    }
+
+    m_store.clear();
+    m_points.clear();
+
+    QList<RegisterPoint> enabledPoints;
+    enabledPoints.reserve(points.size());
+    for (const RegisterPoint &point : points)
+    {
+        // 点位启用字段已废弃，全部参与映射。
+        RegisterPoint mapped = point;
+        mapped.enabled = true;
+        mapped.registerCount = quint16(qMax(1, int(point.registerCount)));
+        mapped.slaveAddress = m_profile.slaveAddress;
+        m_points.insert(mapped.id, mapped);
+        enabledPoints.append(mapped);
+    }
+
+    m_store.build(enabledPoints, StorageType::Holding);
+    m_store.build(enabledPoints, StorageType::Input);
+
+    emit diagnostics(QStringLiteral(
+        "收到点位 %1，映射 %2；Holding %3 块 %4；Input %5 块 %6")
+        .arg(points.size())
+        .arg(m_points.size())
+        .arg(m_store.blockCount(QModbusDataUnit::HoldingRegisters))
+        .arg(m_store.summary(QModbusDataUnit::HoldingRegisters))
+        .arg(m_store.blockCount(QModbusDataUnit::InputRegisters))
+        .arg(m_store.summary(QModbusDataUnit::InputRegisters)));
+
+    if (m_server)
+    {
+        QModbusDataUnitMap map;
+        auto appendCover = [&](QModbusDataUnit::RegisterType table, StorageType storageType) {
+            int start = 65536;
+            int end = -1;
+            for (const RegisterPoint &point : enabledPoints)
+            {
+                if (point.storageType != storageType)
+                {
+                    continue;
+                }
+                start = qMin(start, int(point.address));
+                end = qMax(end, int(point.address) + int(point.registerCount) - 1);
+            }
+            if (end >= start)
+            {
+                map.insert(table, QModbusDataUnit(table, start, quint16(end - start + 1)));
+            }
+        };
+        appendCover(QModbusDataUnit::HoldingRegisters, StorageType::Holding);
+        appendCover(QModbusDataUnit::InputRegisters, StorageType::Input);
+        m_server->setMap(map);
+        m_server->setServerAddress(m_profile.slaveAddress);
+    }
+
+    if (!restartStrategy || m_points.isEmpty())
+    {
+        return;
+    }
+
+    m_strategyEngine = new StrategyEngine(this);
+    connect(m_strategyEngine, &StrategyEngine::valueReady,
+            this, &ModbusRuntimeWorker::writePoint);
+    m_strategyEngine->start(m_points.values());
 }
 
 void ModbusRuntimeWorker::stop()

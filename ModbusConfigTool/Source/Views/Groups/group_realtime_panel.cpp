@@ -6,6 +6,10 @@
 #include "Domain/Models/register_point.h"
 
 #include <QAbstractItemView>
+#include <QToolTip>
+#include <QClipboard>
+#include <QCursor>
+#include <QApplication>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -155,8 +159,24 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     randomButton->setMenu(randomMenu);
     randomButton->setDefaultAction(randomFilteredAction);
 
+    auto *resetButton = new QToolButton(searchBar);
+    resetButton->setObjectName(QStringLiteral("realtimeResetButton"));
+    resetButton->setText(QStringLiteral("重置值"));
+    resetButton->setPopupMode(QToolButton::MenuButtonPopup);
+    resetButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    resetButton->setFixedHeight(32);
+    resetButton->setCursor(Qt::PointingHandCursor);
+    resetButton->setToolTip(QStringLiteral("将实时值重置为 0（并限制在 min/max 范围内）"));
+
+    auto *resetMenu = new QMenu(resetButton);
+    QAction *resetAllAction = resetMenu->addAction(QStringLiteral("重置全部点位"));
+    QAction *resetFilteredAction = resetMenu->addAction(QStringLiteral("重置当前筛选结果"));
+    resetButton->setMenu(resetMenu);
+    resetButton->setDefaultAction(resetFilteredAction);
+
     searchLayout->addWidget(m_searchEdit, 1);
     searchLayout->addWidget(randomButton, 0);
+    searchLayout->addWidget(resetButton, 0);
 
     m_table = new QTableWidget(this);
     m_table->setObjectName(QStringLiteral("groupRealtimeTable"));
@@ -186,11 +206,11 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     m_table->setColumnWidth(9, 110);
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
-    m_table->setSelectionBehavior(QAbstractItemView::SelectItems);
+    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setAlternatingRowColors(true);
     m_table->setShowGrid(false);
-    m_table->setToolTip(QStringLiteral("双击“实时值”列可修改；将按该点协议键对应的数据类型校验"));
+    m_table->setToolTip(QStringLiteral("双击协议键可复制；双击其他列打开配置；双击实时值可改数值"));
 
     auto *buttons = new QDialogButtonBox(this);
     auto *configBtn = new QPushButton(QStringLiteral("寄存器配置"), this);
@@ -211,49 +231,22 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     connect(m_searchEdit, &QLineEdit::textChanged, this, &GroupRealtimePanel::onSearchTextChanged);
     connect(m_table, &QTableWidget::itemChanged, this, &GroupRealtimePanel::onItemChanged);
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, &GroupRealtimePanel::onCellDoubleClicked);
     connect(randomAllAction, &QAction::triggered, this, [this]() {
-        // reuse slot via property-less direct call
-        const QList<RegisterPoint *> targets = collectTargetPoints(false);
-        if (targets.isEmpty())
-        {
-            QMessageBox::information(this, QStringLiteral("随机值"), QStringLiteral("当前分组没有可随机的点位。"));
-            return;
-        }
-        QList<QPair<QString, RegisterValue>> writes;
-        writes.reserve(targets.size());
-        for (RegisterPoint *point : targets)
-        {
-            const RegisterValue value = randomValueInRange(*point);
-            point->currentValue = value;
-            writes.append(qMakePair(point->id, value));
-        }
-        emit bulkValuesWriteRequested(writes);
-        rebuildTable();
+        applyGeneratedValues(false, false);
     });
     connect(randomFilteredAction, &QAction::triggered, this, [this]() {
-        const QList<RegisterPoint *> targets = collectTargetPoints(true);
-        if (targets.isEmpty())
-        {
-            QMessageBox::information(this,
-                                     QStringLiteral("随机值"),
-                                     m_searchText.isEmpty()
-                                         ? QStringLiteral("当前分组没有可随机的点位。")
-                                         : QStringLiteral("当前筛选结果为空，请调整搜索条件。"));
-            return;
-        }
-        QList<QPair<QString, RegisterValue>> writes;
-        writes.reserve(targets.size());
-        for (RegisterPoint *point : targets)
-        {
-            const RegisterValue value = randomValueInRange(*point);
-            point->currentValue = value;
-            writes.append(qMakePair(point->id, value));
-        }
-        emit bulkValuesWriteRequested(writes);
-        rebuildTable();
+        applyGeneratedValues(true, false);
     });
-    // 主按钮默认执行“随机当前筛选结果”
     connect(randomButton, &QToolButton::clicked, randomFilteredAction, &QAction::trigger);
+
+    connect(resetAllAction, &QAction::triggered, this, [this]() {
+        applyGeneratedValues(false, true);
+    });
+    connect(resetFilteredAction, &QAction::triggered, this, [this]() {
+        applyGeneratedValues(true, true);
+    });
+    connect(resetButton, &QToolButton::clicked, resetFilteredAction, &QAction::trigger);
 
     updateValues(doc);
 }
@@ -261,6 +254,10 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
 void GroupRealtimePanel::updateValues(const ProjectDocument &doc)
 {
     m_document = doc;
+    if (tryUpdateValueCells())
+    {
+        return;
+    }
     rebuildTable();
 }
 
@@ -268,11 +265,6 @@ void GroupRealtimePanel::onSearchTextChanged(const QString &text)
 {
     m_searchText = text.trimmed();
     rebuildTable();
-}
-
-void GroupRealtimePanel::onRandomizeClicked()
-{
-    // kept for slot completeness; actions handle the work
 }
 
 bool GroupRealtimePanel::matchesSearch(const RegisterPoint &point) const
@@ -295,6 +287,66 @@ bool GroupRealtimePanel::matchesSearch(const RegisterPoint &point) const
         || contains(dataTypeToString(point.dataType))
         || contains(endianToString(point.endian))
         || contains(strategyDisplayText(point.strategy));
+}
+
+QString GroupRealtimePanel::pointIdAtRow(int row) const
+{
+    if (!m_table || row < 0 || row >= m_table->rowCount())
+    {
+        return QString();
+    }
+
+    if (QTableWidgetItem *valueItem = m_table->item(row, kValueColumn))
+    {
+        const QString pointId = valueItem->data(Qt::UserRole).toString();
+        if (!pointId.isEmpty())
+        {
+            return pointId;
+        }
+    }
+
+    if (QTableWidgetItem *firstItem = m_table->item(row, 0))
+    {
+        return firstItem->data(Qt::UserRole).toString();
+    }
+    return QString();
+}
+
+void GroupRealtimePanel::onCellDoubleClicked(int row, int column)
+{
+    if (column == kValueColumn)
+    {
+        return;
+    }
+
+    // 双击协议键：复制到剪贴板，方便联调粘贴
+    if (column == kProtocolKeyColumn)
+    {
+        QTableWidgetItem *keyItem = m_table ? m_table->item(row, kProtocolKeyColumn) : nullptr;
+        const QString protocolKey = keyItem ? keyItem->text().trimmed() : QString();
+        if (protocolKey.isEmpty())
+        {
+            QToolTip::showText(QCursor::pos(), QStringLiteral("协议键为空，无法复制"), this);
+            return;
+        }
+
+        if (QClipboard *clipboard = QApplication::clipboard())
+        {
+            clipboard->setText(protocolKey);
+        }
+        QToolTip::showText(QCursor::pos(),
+                           QStringLiteral("已复制协议键：%1").arg(protocolKey),
+                           this);
+        return;
+    }
+
+    const QString pointId = pointIdAtRow(row);
+    if (pointId.isEmpty())
+    {
+        return;
+    }
+
+    emit editRegisterRequested(pointId);
 }
 
 const RegisterPoint *GroupRealtimePanel::findPoint(const QString &pointId) const
@@ -325,6 +377,104 @@ QList<RegisterPoint *> GroupRealtimePanel::collectTargetPoints(bool filteredOnly
         targets.append(&point);
     }
     return targets;
+}
+
+void GroupRealtimePanel::applyGeneratedValues(bool filteredOnly, bool resetToZero)
+{
+    const QList<RegisterPoint *> targets = collectTargetPoints(filteredOnly);
+    const QString title = resetToZero ? QStringLiteral("重置值") : QStringLiteral("随机值");
+    if (targets.isEmpty())
+    {
+        const QString emptyText = filteredOnly && !m_searchText.isEmpty()
+            ? QStringLiteral("当前筛选结果为空，请调整搜索条件。")
+            : QStringLiteral("当前分组没有可操作的点位。");
+        QMessageBox::information(this, title, emptyText);
+        return;
+    }
+
+    QList<QPair<QString, RegisterValue>> writes;
+    writes.reserve(targets.size());
+    for (RegisterPoint *point : targets)
+    {
+        const RegisterValue value = resetToZero
+            ? resetValueInRange(*point)
+            : randomValueInRange(*point);
+        point->currentValue = value;
+        writes.append(qMakePair(point->id, value));
+    }
+
+    emit bulkValuesWriteRequested(writes);
+}
+
+RegisterValue GroupRealtimePanel::resetValueInRange(const RegisterPoint &point)
+{
+    RegisterValue minimum = point.minimumValue;
+    RegisterValue maximum = point.maximumValue;
+    if (minimum.dataType() != point.dataType)
+    {
+        minimum = ProjectFactory::minimumFor(point.dataType);
+    }
+    if (maximum.dataType() != point.dataType)
+    {
+        maximum = ProjectFactory::maximumFor(point.dataType);
+    }
+
+    if (isFloatingType(point.dataType))
+    {
+        double low = minimum.toDouble();
+        double high = maximum.toDouble();
+        if (high < low)
+        {
+            std::swap(low, high);
+        }
+        double value = 0.0;
+        if (value < low)
+        {
+            value = low;
+        }
+        else if (value > high)
+        {
+            value = high;
+        }
+        return RegisterValue::fromFloating(value, point.dataType);
+    }
+
+    if (isSignedType(point.dataType))
+    {
+        qint64 low = minimum.toSigned64();
+        qint64 high = maximum.toSigned64();
+        if (high < low)
+        {
+            std::swap(low, high);
+        }
+        qint64 value = 0;
+        if (value < low)
+        {
+            value = low;
+        }
+        else if (value > high)
+        {
+            value = high;
+        }
+        return RegisterValue::fromSigned64(value, point.dataType);
+    }
+
+    quint64 low = minimum.toUnsigned64();
+    quint64 high = maximum.toUnsigned64();
+    if (high < low)
+    {
+        std::swap(low, high);
+    }
+    quint64 value = 0ULL;
+    if (value < low)
+    {
+        value = low;
+    }
+    else if (value > high)
+    {
+        value = high;
+    }
+    return RegisterValue::fromUnsigned64(value, point.dataType);
 }
 
 RegisterValue GroupRealtimePanel::randomValueInRange(const RegisterPoint &point)
@@ -392,6 +542,71 @@ RegisterValue GroupRealtimePanel::randomValueInRange(const RegisterPoint &point)
     return RegisterValue::fromUnsigned64(low + offset, point.dataType);
 }
 
+bool GroupRealtimePanel::tryUpdateValueCells()
+{
+    if (!m_table || m_updatingTable)
+    {
+        return false;
+    }
+
+    int expected = 0;
+    for (const RegisterPoint &point : m_document.registers)
+    {
+        if (point.groupId != m_groupId)
+        {
+            continue;
+        }
+        if (!matchesSearch(point))
+        {
+            continue;
+        }
+        ++expected;
+    }
+
+    if (expected == 0 || m_table->rowCount() != expected)
+    {
+        return false;
+    }
+
+    // 仅就地刷新实时值/策略，避免整表重建卡顿
+    m_updatingTable = true;
+    for (int row = 0; row < m_table->rowCount(); ++row)
+    {
+        QTableWidgetItem *valueItem = m_table->item(row, kValueColumn);
+        if (!valueItem)
+        {
+            m_updatingTable = false;
+            return false;
+        }
+
+        const QString pointId = valueItem->data(Qt::UserRole).toString();
+        const RegisterPoint *point = findPoint(pointId);
+        if (!point)
+        {
+            m_updatingTable = false;
+            return false;
+        }
+
+        const QString display = point->currentValue.toDisplayString(point->precision);
+        if (valueItem->text() != display)
+        {
+            valueItem->setText(display);
+            valueItem->setData(Qt::UserRole + 2, display);
+        }
+
+        if (QTableWidgetItem *strategyItem = m_table->item(row, 8))
+        {
+            const QString strategyText = strategyDisplayText(point->strategy);
+            if (strategyItem->text() != strategyText)
+            {
+                strategyItem->setText(strategyText);
+            }
+        }
+    }
+    m_updatingTable = false;
+    return true;
+}
+
 void GroupRealtimePanel::rebuildTable()
 {
     m_updatingTable = true;
@@ -414,15 +629,47 @@ void GroupRealtimePanel::rebuildTable()
 
         const int row = visible;
         m_table->insertRow(row);
-        m_table->setItem(row, 0, makeReadOnlyItem(QString::number(point.slaveAddress)));
-        m_table->setItem(row, 1, makeReadOnlyItem(QString::number(point.address)));
-        m_table->setItem(row, 2, makeReadOnlyItem(QString::number(point.registerCount)));
-        m_table->setItem(row, 3, makeReadOnlyItem(point.name));
-        m_table->setItem(row, 4, makeReadOnlyItem(dataTypeToString(point.dataType)));
-        m_table->setItem(row, 5, makeReadOnlyItem(endianToString(point.endian)));
-        m_table->setItem(row, 6, makeReadOnlyItem(point.protocolKey));
-        m_table->setItem(row, 7, makeReadOnlyItem(point.label));
-        m_table->setItem(row, 8, makeReadOnlyItem(strategyDisplayText(point.strategy)));
+        auto setPointMeta = [&](QTableWidgetItem *item) {
+            if (item)
+            {
+                item->setData(Qt::UserRole, point.id);
+                item->setToolTip(QStringLiteral("双击打开该点配置"));
+            }
+        };
+
+        auto *slaveItem = makeReadOnlyItem(QString::number(point.slaveAddress));
+        auto *addressItem = makeReadOnlyItem(QString::number(point.address));
+        auto *countItem = makeReadOnlyItem(QString::number(point.registerCount));
+        auto *nameItem = makeReadOnlyItem(point.name);
+        auto *typeItem = makeReadOnlyItem(dataTypeToString(point.dataType));
+        auto *endianItem = makeReadOnlyItem(endianToString(point.endian));
+        auto *keyItem = makeReadOnlyItem(point.protocolKey);
+        auto *labelItem = makeReadOnlyItem(point.label);
+        auto *strategyItem = makeReadOnlyItem(strategyDisplayText(point.strategy));
+        setPointMeta(slaveItem);
+        setPointMeta(addressItem);
+        setPointMeta(countItem);
+        setPointMeta(nameItem);
+        setPointMeta(typeItem);
+        setPointMeta(endianItem);
+        setPointMeta(keyItem);
+        if (keyItem)
+        {
+            keyItem->setToolTip(point.protocolKey.isEmpty()
+                                    ? QStringLiteral("协议键为空")
+                                    : QStringLiteral("双击复制协议键：%1").arg(point.protocolKey));
+        }
+        setPointMeta(labelItem);
+        setPointMeta(strategyItem);
+        m_table->setItem(row, 0, slaveItem);
+        m_table->setItem(row, 1, addressItem);
+        m_table->setItem(row, 2, countItem);
+        m_table->setItem(row, 3, nameItem);
+        m_table->setItem(row, 4, typeItem);
+        m_table->setItem(row, 5, endianItem);
+        m_table->setItem(row, 6, keyItem);
+        m_table->setItem(row, 7, labelItem);
+        m_table->setItem(row, 8, strategyItem);
 
         auto *valueItem = new QTableWidgetItem(point.currentValue.toDisplayString(point.precision));
         valueItem->setFlags(valueItem->flags() | Qt::ItemIsEditable);

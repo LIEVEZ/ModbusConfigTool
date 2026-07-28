@@ -23,6 +23,7 @@ public:
     void startPort(const ProjectDocument &document, const QString &portId);
     void stopPort(const QString &portId);
     void stopAll();
+    void reloadRunningPorts(const ProjectDocument &document);
     void writePoint(const QString &pointId, const RegisterValue &value);
 
 signals:

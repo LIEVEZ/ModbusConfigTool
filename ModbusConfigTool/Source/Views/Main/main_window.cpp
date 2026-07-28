@@ -53,7 +53,8 @@ MainWindow::MainWindow(MainWindowViewModel *viewModel, QWidget *parent)
     tryOpenStartupProject();
     resize(1600, 900);
     setMinimumSize(1200, 700);
-    setWindowTitle(QStringLiteral("Modbus 配置工具"));
+    // 标题由 refreshStatus 根据工程名/文件名生成，避免覆盖自动打开结果
+    refreshStatus();
 }
 
 void MainWindow::buildToolBar()
@@ -295,8 +296,8 @@ void MainWindow::connectActions()
     connect(m_canvasView, &GroupCanvasView::groupSelected, this,
             [this](const QString &groupId)
     {
+        // 画布已处理单选/Ctrl 多选，这里只记录主选中项
         m_selectedGroupId = groupId;
-        m_canvasView->setSelectedGroup(groupId);
     });
 
     connect(m_canvasView, &GroupCanvasView::groupEnabledChangeRequested, this,
@@ -377,7 +378,9 @@ void MainWindow::refreshDocument()
     updateGroupCount(document.groups.size());
     updatePortCount(document.ports.size());
     syncCommMonitorPorts();
-    if (!m_selectedGroupId.isEmpty())
+    // setModel 已尽量保留多选；仅当主选中丢失时再单选恢复
+    if (!m_selectedGroupId.isEmpty()
+        && !m_canvasView->isGroupSelected(m_selectedGroupId))
     {
         m_canvasView->setSelectedGroup(m_selectedGroupId);
     }
@@ -388,8 +391,23 @@ void MainWindow::refreshStatus()
 {
     const ProjectDocument &document = m_viewModel->document();
     m_statusView->updateStatus(document, m_viewModel->isDirty(), m_portStates);
+
+    QString title = document.project.name.trimmed();
+    if (title.isEmpty() || title == QStringLiteral("未命名工程"))
+    {
+        const QString filePath = m_viewModel->filePath();
+        if (!filePath.isEmpty())
+        {
+            title = QFileInfo(filePath).completeBaseName();
+        }
+    }
+    if (title.isEmpty())
+    {
+        title = QStringLiteral("未命名工程");
+    }
+
     setWindowTitle(QStringLiteral("%1%2 - Modbus 配置工具")
-                   .arg(document.project.name, m_viewModel->isDirty() ? QStringLiteral(" *") : QString()));
+                   .arg(title, m_viewModel->isDirty() ? QStringLiteral(" *") : QString()));
 }
 
 void MainWindow::updateGroupCount(int count)
@@ -592,12 +610,12 @@ QString MainWindow::uniqueGroupName(const QString &preferredName, const QString 
 
 void MainWindow::importGroup()
 {
-    const QString path = QFileDialog::getOpenFileName(
+    const QStringList paths = QFileDialog::getOpenFileNames(
         this,
-        QStringLiteral("导入分组 CSV"),
+        QStringLiteral("导入分组 CSV（可多选）"),
         QString(),
         QStringLiteral("CSV 文件 (*.csv);;所有文件 (*.*)"));
-    if (path.isEmpty())
+    if (paths.isEmpty())
     {
         return;
     }
@@ -607,28 +625,97 @@ void MainWindow::importGroup()
         QStringLiteral("#c08532"), QStringLiteral("#8b5cf6"), QStringLiteral("#cf2d56")
     };
 
-    const QFileInfo fileInfo(path);
-    RegisterGroup group;
-    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    // 分组名称直接取导入文件名（不含扩展名），重名自动加后缀。
-    group.name = uniqueGroupName(fileInfo.completeBaseName());
-    group.color = palette.at(m_viewModel->document().groups.size() % palette.size());
-    group.enabled = true;
-    group.isDefault = false;
-    group.canvasX = 0;
-    group.canvasY = 0;
-    group.description = QStringLiteral("由 CSV 导入：%1").arg(fileInfo.fileName());
+    int successCount = 0;
+    int failCount = 0;
+    QStringList failDetails;
+    QString lastGroupId;
+    QString lastSuccessMessage;
 
-    const OperationResult result = m_viewModel->importGroupFromCsv(path, group);
-    const QString successMessage = result.message.isEmpty()
-        ? QStringLiteral("分组已导入")
-        : result.message;
-    showResult(result, successMessage);
-    if (result.success)
+    for (const QString &csvPath : paths)
     {
-        m_selectedGroupId = group.id;
+        const QFileInfo fileInfo(csvPath);
+        RegisterGroup group;
+        group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        // 分组名称直接取导入文件名（不含扩展名），重名自动加后缀。
+        group.name = uniqueGroupName(fileInfo.completeBaseName());
+        group.color = palette.at(m_viewModel->document().groups.size() % palette.size());
+        group.enabled = true;
+        group.isDefault = false;
+        group.canvasX = 0;
+        group.canvasY = 0;
+        group.description = QStringLiteral("由 CSV 导入：%1").arg(fileInfo.fileName());
+
+        const OperationResult result = m_viewModel->importGroupFromCsv(csvPath, group);
+        if (result.success)
+        {
+            ++successCount;
+            lastGroupId = group.id;
+            lastSuccessMessage = result.message.isEmpty()
+                ? QStringLiteral("分组已导入")
+                : result.message;
+        }
+        else
+        {
+            ++failCount;
+            const QString reason = result.detail.isEmpty() ? result.message : result.detail;
+            failDetails.append(QStringLiteral("%1：%2")
+                                   .arg(fileInfo.fileName(),
+                                        reason.isEmpty() ? QStringLiteral("导入失败") : reason));
+        }
+    }
+
+    if (successCount > 0)
+    {
+        m_selectedGroupId = lastGroupId;
         scheduleRefresh();
     }
+
+    if (paths.size() == 1)
+    {
+        if (successCount == 1)
+        {
+            OperationResult ok = OperationResult::ok();
+            ok.message = lastSuccessMessage;
+            showResult(ok, lastSuccessMessage);
+        }
+        else
+        {
+            const QString detail = failDetails.isEmpty()
+                ? QStringLiteral("导入失败")
+                : failDetails.first();
+            showResult(OperationResult::fail(QStringLiteral("import_failed"),
+                                             QStringLiteral("csv"),
+                                             detail),
+                       QStringLiteral("分组导入失败"));
+        }
+        return;
+    }
+
+    if (failCount == 0)
+    {
+        const QString message = QStringLiteral("已连续导入 %1 个分组").arg(successCount);
+        OperationResult ok = OperationResult::ok();
+        ok.message = message;
+        showResult(ok, message);
+        return;
+    }
+
+    if (successCount == 0)
+    {
+        showResult(OperationResult::fail(QStringLiteral("import_failed"),
+                                         QStringLiteral("csv"),
+                                         failDetails.join(QStringLiteral("\n"))),
+                   QStringLiteral("分组导入失败"));
+        return;
+    }
+
+    const QString message = QStringLiteral("已导入 %1 个分组，失败 %2 个")
+                                .arg(successCount)
+                                .arg(failCount);
+    OperationResult partial = OperationResult::ok();
+    partial.message = message;
+    partial.detail = failDetails.join(QStringLiteral("；"));
+    showResult(partial, message);
 }
 
 void MainWindow::addPort()
@@ -695,6 +782,11 @@ void MainWindow::showGroupRealtime(const QString &groupId)
     auto *panel = new GroupRealtimePanel(groupId, m_viewModel->document(), this);
     panel->setAttribute(Qt::WA_DeleteOnClose);
     connect(panel, &GroupRealtimePanel::configureRegistersRequested, this, &MainWindow::showGroupConfig);
+    connect(panel, &GroupRealtimePanel::editRegisterRequested, this, &MainWindow::editRegister);
+    connect(m_viewModel, &MainWindowViewModel::documentChanged, panel, [panel, this]()
+    {
+        panel->updateValues(m_viewModel->document());
+    });
     connect(panel, &GroupRealtimePanel::valueWriteRequested, this,
             [this](const QString &pointId, const RegisterValue &value)
     {
@@ -727,16 +819,13 @@ void MainWindow::showGroupRealtime(const QString &groupId)
     connect(panel, &GroupRealtimePanel::bulkValuesWriteRequested, this,
             [this](const QList<QPair<QString, RegisterValue>> &values)
     {
-        for (const auto &item : values)
-        {
-            m_viewModel->writePoint(item.first, item.second);
-        }
+        m_viewModel->writePoints(values);
         if (m_logView)
         {
             m_logView->appendMessage(
                 QStringLiteral("INFO"),
                 QStringLiteral("RUNTIME"),
-                QStringLiteral("随机写入实时值：共 %1 个点位（均在 min/max 范围内）")
+                QStringLiteral("批量写入实时值：共 %1 个点位")
                     .arg(values.size()));
         }
     });

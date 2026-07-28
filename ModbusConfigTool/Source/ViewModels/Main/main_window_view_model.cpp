@@ -76,16 +76,46 @@ void MainWindowViewModel::stopAllPorts() { m_runtimeService->stopAll(); }
 // 分组
 OperationResult MainWindowViewModel::addGroup(const RegisterGroup &group) { return m_registerService->addGroup(group); }
 OperationResult MainWindowViewModel::updateGroup(const RegisterGroup &group) { return m_registerService->updateGroup(group); }
-OperationResult MainWindowViewModel::setGroupEnabled(const QString &groupId, bool enabled) { return m_registerService->setGroupEnabled(groupId, enabled); }
-OperationResult MainWindowViewModel::setGroupPort(const QString &groupId, const QString &portId) { return m_registerService->setGroupPort(groupId, portId); }
+OperationResult MainWindowViewModel::setGroupEnabled(const QString &groupId, bool enabled)
+{
+    const OperationResult result = m_registerService->setGroupEnabled(groupId, enabled);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
+OperationResult MainWindowViewModel::setGroupPort(const QString &groupId, const QString &portId)
+{
+    const OperationResult result = m_registerService->setGroupPort(groupId, portId);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 OperationResult MainWindowViewModel::moveGroup(const QString &groupId, int x, int y) { return m_registerService->moveGroup(groupId, x, y); }
-OperationResult MainWindowViewModel::removeGroup(const QString &groupId, bool removePoints) { return m_registerService->removeGroup(groupId, removePoints); }
+OperationResult MainWindowViewModel::removeGroup(const QString &groupId, bool removePoints)
+{
+    const OperationResult result = m_registerService->removeGroup(groupId, removePoints);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 
 // 分组内寄存器 / CSV
 quint16 MainWindowViewModel::nextAddress(const QString &groupId) const { return m_registerService->nextAddress(groupId); }
-OperationResult MainWindowViewModel::addRegister(const RegisterPoint &point) { return m_registerService->addRegister(point); }
-OperationResult MainWindowViewModel::updateRegister(const RegisterPoint &point) { return m_registerService->updateRegister(point); }
-OperationResult MainWindowViewModel::removeRegisters(const QStringList &ids) { return m_registerService->removeRegisters(ids); }
+OperationResult MainWindowViewModel::addRegister(const RegisterPoint &point)
+{
+    const OperationResult result = m_registerService->addRegister(point);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
+OperationResult MainWindowViewModel::updateRegister(const RegisterPoint &point)
+{
+    const OperationResult result = m_registerService->updateRegister(point);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
+OperationResult MainWindowViewModel::removeRegisters(const QStringList &ids)
+{
+    const OperationResult result = m_registerService->removeRegisters(ids);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 
 OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId,
                                                         const QString &path,
@@ -106,6 +136,7 @@ OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId,
             result.message = QStringLiteral("已导入 %1 条寄存器").arg(imported.registers.size());
         }
         result.detail = imported.result.detail;
+        syncRuntimeMaps();
     }
     return result;
 }
@@ -137,6 +168,7 @@ OperationResult MainWindowViewModel::importGroupFromCsv(const QString &path, con
         {
             result.detail = imported.result.detail;
         }
+        syncRuntimeMaps();
     }
     return result;
 }
@@ -152,12 +184,40 @@ OperationResult MainWindowViewModel::exportGroupCsv(const QString &groupId, cons
 }
 
 // 寄存器批量操作
-OperationResult MainWindowViewModel::setRegistersEnabled(const QStringList &ids, bool enabled) { return m_registerService->setEnabled(ids, enabled); }
-OperationResult MainWindowViewModel::applyRegisterPatch(const QStringList &ids, const RegisterPatch &patch) { return m_registerService->applyPatch(ids, patch); }
+OperationResult MainWindowViewModel::setRegistersEnabled(const QStringList &ids, bool enabled)
+{
+    const OperationResult result = m_registerService->setEnabled(ids, enabled);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
+OperationResult MainWindowViewModel::applyRegisterPatch(const QStringList &ids, const RegisterPatch &patch)
+{
+    const OperationResult result = m_registerService->applyPatch(ids, patch);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 
 void MainWindowViewModel::writePoint(const QString &pointId, const RegisterValue &value)
 {
     m_projectService->updateRuntimeValue(pointId, value);
     m_runtimeService->writePoint(pointId, value);
-    m_projectService->markDirty();
+}
+
+void MainWindowViewModel::writePoints(const QList<QPair<QString, RegisterValue>> &values)
+{
+    if (values.isEmpty())
+    {
+        return;
+    }
+
+    m_projectService->updateRuntimeValues(values);
+    for (const auto &item : values)
+    {
+        m_runtimeService->writePoint(item.first, item.second);
+    }
+}
+
+void MainWindowViewModel::syncRuntimeMaps()
+{
+    m_runtimeService->reloadRunningPorts(document());
 }

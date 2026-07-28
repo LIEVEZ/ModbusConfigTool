@@ -25,21 +25,27 @@ public:
 
 signals:
     void configureRegistersRequested(const QString &groupId);
+    void editRegisterRequested(const QString &registerId);
     void valueWriteRequested(const QString &pointId, const RegisterValue &value);
     void bulkValuesWriteRequested(const QList<QPair<QString, RegisterValue>> &values);
 
 private slots:
     void onItemChanged(QTableWidgetItem *item);
+    void onCellDoubleClicked(int row, int column);
     void onSearchTextChanged(const QString &text);
-    void onRandomizeClicked();
 
 private:
     void rebuildTable();
+    bool tryUpdateValueCells();
     bool matchesSearch(const RegisterPoint &point) const;
     const RegisterPoint *findPoint(const QString &pointId) const;
+    QString pointIdAtRow(int row) const;
     QList<RegisterPoint *> collectTargetPoints(bool filteredOnly);
+    void applyGeneratedValues(bool filteredOnly, bool resetToZero);
     static RegisterValue randomValueInRange(const RegisterPoint &point);
+    static RegisterValue resetValueInRange(const RegisterPoint &point);
 
+    static const int kProtocolKeyColumn = 6;
     static const int kValueColumn = 9;
 
     QString m_groupId;

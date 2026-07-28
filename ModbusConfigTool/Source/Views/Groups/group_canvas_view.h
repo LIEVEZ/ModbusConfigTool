@@ -5,6 +5,9 @@
 
 #include <QHash>
 #include <QMap>
+#include <QPoint>
+#include <QSet>
+#include <QStringList>
 #include <QWidget>
 
 class GroupCardWidget;
@@ -19,6 +22,8 @@ public:
     void setModel(const ProjectDocument &doc,
                   const QHash<QString, RuntimeState> &portStates = {});
     void setSelectedGroup(const QString &groupId);
+    QStringList selectedGroupIds() const;
+    bool isGroupSelected(const QString &groupId) const;
     void updateRuntimeValue(const ProjectDocument &doc, const QString &pointId);
     void updatePortStates(const QHash<QString, RuntimeState> &portStates);
 
@@ -37,6 +42,8 @@ protected:
 
 private:
     void updateCanvasExtent();
+    void applySelectionVisuals();
+    void onCardClicked(const QString &groupId, Qt::KeyboardModifiers modifiers);
     void onCardDragStarted(const QString &groupId, const QPoint &offset);
     void onCardDragging(const QString &groupId, const QPoint &globalPos);
     void onCardDragFinished(const QString &groupId);
@@ -44,8 +51,10 @@ private:
 
     QMap<QString, GroupCardWidget*> m_cards;
     QHash<QString, RuntimeState> m_portStates;
+    QSet<QString> m_selectedIds;
     QString m_draggedCardId;
     QPoint m_dragOffset;
+    QHash<QString, QPoint> m_dragStartPositions;
 };
 
 #endif

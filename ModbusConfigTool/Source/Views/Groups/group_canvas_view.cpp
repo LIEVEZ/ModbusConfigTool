@@ -15,10 +15,13 @@ GroupCanvasView::GroupCanvasView(QWidget *parent) : QWidget(parent)
 void GroupCanvasView::setModel(const ProjectDocument &doc,
                                const QHash<QString, RuntimeState> &portStates)
 {
-    // Remove old cards
+    const QSet<QString> previousSelected = m_selectedIds;
+
     qDeleteAll(m_cards);
     m_cards.clear();
     m_portStates = portStates;
+    m_draggedCardId.clear();
+    m_dragStartPositions.clear();
 
     for (const RegisterGroup &group : doc.groups)
     {
@@ -43,11 +46,7 @@ void GroupCanvasView::setModel(const ProjectDocument &doc,
         connect(card, &GroupCardWidget::dragStarted, this, &GroupCanvasView::onCardDragStarted);
         connect(card, &GroupCardWidget::dragging, this, &GroupCanvasView::onCardDragging);
         connect(card, &GroupCardWidget::dragFinished, this, &GroupCanvasView::onCardDragFinished);
-        connect(card, &GroupCardWidget::clicked, this, [this](const QString &groupId)
-        {
-            setSelectedGroup(groupId);
-            emit groupSelected(groupId);
-        });
+        connect(card, &GroupCardWidget::clicked, this, &GroupCanvasView::onCardClicked);
         connect(card, &GroupCardWidget::enabledChangeRequested,
                 this, &GroupCanvasView::groupEnabledChangeRequested);
         connect(card, &GroupCardWidget::portChangeRequested,
@@ -55,12 +54,29 @@ void GroupCanvasView::setModel(const ProjectDocument &doc,
         connect(card, &GroupCardWidget::doubleClicked, this, &GroupCanvasView::groupDoubleClicked);
         connect(card, &GroupCardWidget::contextMenuRequested, this, &GroupCanvasView::groupContextMenuRequested);
     }
+
+    // 刷新后尽量保留多选（仍存在的分组）
+    m_selectedIds.clear();
+    for (const QString &groupId : previousSelected)
+    {
+        if (m_cards.contains(groupId))
+        {
+            m_selectedIds.insert(groupId);
+        }
+    }
+    applySelectionVisuals();
     updateCanvasExtent();
 }
 
 void GroupCanvasView::updateRuntimeValue(const ProjectDocument &doc,
                                          const QString &pointId)
 {
+    if (pointId.isEmpty())
+    {
+        Q_UNUSED(doc);
+        return;
+    }
+
     QString groupId;
     for (const RegisterPoint &point : doc.registers)
     {
@@ -89,17 +105,67 @@ void GroupCanvasView::updateRuntimeValue(const ProjectDocument &doc,
 
 void GroupCanvasView::setSelectedGroup(const QString &groupId)
 {
+    m_selectedIds.clear();
+    if (!groupId.isEmpty() && m_cards.contains(groupId))
+    {
+        m_selectedIds.insert(groupId);
+    }
+    applySelectionVisuals();
+}
+
+QStringList GroupCanvasView::selectedGroupIds() const
+{
+    return m_selectedIds.values();
+}
+
+bool GroupCanvasView::isGroupSelected(const QString &groupId) const
+{
+    return m_selectedIds.contains(groupId);
+}
+
+void GroupCanvasView::applySelectionVisuals()
+{
     for (auto it = m_cards.begin(); it != m_cards.end(); ++it)
     {
-        it.value()->setSelected(it.key() == groupId);
+        if (it.value())
+        {
+            it.value()->setSelected(m_selectedIds.contains(it.key()));
+        }
     }
+}
+
+void GroupCanvasView::onCardClicked(const QString &groupId, Qt::KeyboardModifiers modifiers)
+{
+    if (!m_cards.contains(groupId))
+    {
+        return;
+    }
+
+    if (modifiers.testFlag(Qt::ControlModifier))
+    {
+        if (m_selectedIds.contains(groupId))
+        {
+            m_selectedIds.remove(groupId);
+        }
+        else
+        {
+            m_selectedIds.insert(groupId);
+        }
+    }
+    else
+    {
+        m_selectedIds.clear();
+        m_selectedIds.insert(groupId);
+    }
+
+    applySelectionVisuals();
+    emit groupSelected(groupId);
 }
 
 void GroupCanvasView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
 
-    // Grid background
     p.fillRect(rect(), QColor(236, 235, 230));
     p.setPen(QPen(QColor(38, 37, 30, 10), 1));
     const int gridSize = 26;
@@ -112,7 +178,6 @@ void GroupCanvasView::paintEvent(QPaintEvent *)
         p.drawLine(0, y, width(), y);
     }
 
-    // Hint text if empty
     if (m_cards.isEmpty())
     {
         p.setPen(QColor(38, 37, 30, 90));
@@ -127,7 +192,6 @@ void GroupCanvasView::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        // Check if clicked on empty canvas
         bool hitCard = false;
         for (GroupCardWidget *card : m_cards)
         {
@@ -139,7 +203,8 @@ void GroupCanvasView::mousePressEvent(QMouseEvent *event)
         }
         if (!hitCard)
         {
-            setSelectedGroup(QString());
+            m_selectedIds.clear();
+            applySelectionVisuals();
             emit canvasClicked();
         }
     }
@@ -148,33 +213,114 @@ void GroupCanvasView::mousePressEvent(QMouseEvent *event)
 
 void GroupCanvasView::onCardDragStarted(const QString &groupId, const QPoint &offset)
 {
+    if (!m_cards.contains(groupId))
+    {
+        return;
+    }
+
     m_draggedCardId = groupId;
     m_dragOffset = offset;
-    if (m_cards.contains(groupId))
+    m_dragStartPositions.clear();
+
+    // 拖的不在选中集合里：改为单选该卡
+    if (!m_selectedIds.contains(groupId))
     {
-        m_cards[groupId]->raise();
+        m_selectedIds.clear();
+        m_selectedIds.insert(groupId);
+        applySelectionVisuals();
+    }
+
+    for (const QString &selectedId : m_selectedIds)
+    {
+        GroupCardWidget *card = m_cards.value(selectedId, nullptr);
+        if (!card)
+        {
+            continue;
+        }
+        m_dragStartPositions.insert(selectedId, card->pos());
+        card->raise();
     }
 }
 
 void GroupCanvasView::onCardDragging(const QString &groupId, const QPoint &globalPos)
 {
-    if (groupId != m_draggedCardId || !m_cards.contains(groupId)) return;
+    if (groupId != m_draggedCardId || !m_cards.contains(groupId))
+    {
+        return;
+    }
+    if (!m_dragStartPositions.contains(groupId))
+    {
+        return;
+    }
 
     const QPoint canvasPos = mapFromGlobal(globalPos);
-    const QPoint newPos = canvasPos - m_dragOffset;
-    const int x = qMax(0, newPos.x());
-    const int y = qMax(0, newPos.y());
-    m_cards[groupId]->move(x, y);
+    const QPoint rawPrimary = canvasPos - m_dragOffset;
+    QPoint delta = rawPrimary - m_dragStartPositions.value(groupId);
+
+    // 整体平移，避免任一张卡越出左/上边界时打散相对位置
+    int minX = 0;
+    int minY = 0;
+    bool first = true;
+    for (auto it = m_dragStartPositions.constBegin(); it != m_dragStartPositions.constEnd(); ++it)
+    {
+        const int x = it.value().x() + delta.x();
+        const int y = it.value().y() + delta.y();
+        if (first)
+        {
+            minX = x;
+            minY = y;
+            first = false;
+        }
+        else
+        {
+            minX = qMin(minX, x);
+            minY = qMin(minY, y);
+        }
+    }
+    if (minX < 0)
+    {
+        delta.rx() -= minX;
+    }
+    if (minY < 0)
+    {
+        delta.ry() -= minY;
+    }
+
+    for (auto it = m_dragStartPositions.constBegin(); it != m_dragStartPositions.constEnd(); ++it)
+    {
+        GroupCardWidget *card = m_cards.value(it.key(), nullptr);
+        if (!card)
+        {
+            continue;
+        }
+        card->move(it.value() + delta);
+    }
     updateCanvasExtent();
 }
 
 void GroupCanvasView::onCardDragFinished(const QString &groupId)
 {
-    if (groupId != m_draggedCardId || !m_cards.contains(groupId)) return;
+    if (groupId != m_draggedCardId)
+    {
+        return;
+    }
 
-    const QPoint pos = m_cards[groupId]->pos();
-    emit groupMoved(groupId, pos.x(), pos.y());
+    for (auto it = m_dragStartPositions.constBegin(); it != m_dragStartPositions.constEnd(); ++it)
+    {
+        GroupCardWidget *card = m_cards.value(it.key(), nullptr);
+        if (!card)
+        {
+            continue;
+        }
+        const QPoint pos = card->pos();
+        if (pos != it.value())
+        {
+            emit groupMoved(it.key(), pos.x(), pos.y());
+        }
+    }
+
     m_draggedCardId.clear();
+    m_dragStartPositions.clear();
 }
 
 void GroupCanvasView::updateCanvasExtent()

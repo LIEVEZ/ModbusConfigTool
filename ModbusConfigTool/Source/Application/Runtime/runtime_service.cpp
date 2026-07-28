@@ -54,6 +54,8 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
     PortRuntime &runtime = m_ports[portId];
     if (runtime.state == RuntimeState::Running || runtime.state == RuntimeState::Starting)
     {
+        // 已在运行：热更新映射，避免分组启停后仍使用旧地址表
+        reloadRunningPorts(document);
         return;
     }
 
@@ -133,6 +135,40 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
         emit portError(portId,
                        QStringLiteral("无法调度运行时启动"),
                        QStringLiteral("QMetaObject::invokeMethod 失败"));
+    }
+}
+
+
+void RuntimeService::reloadRunningPorts(const ProjectDocument &document)
+{
+    for (auto it = m_ports.begin(); it != m_ports.end(); ++it)
+    {
+        PortRuntime &runtime = it.value();
+        if (!runtime.worker)
+        {
+            continue;
+        }
+        if (runtime.state != RuntimeState::Running && runtime.state != RuntimeState::Starting)
+        {
+            continue;
+        }
+
+        const QString portId = it.key();
+        const QList<RegisterPoint> points = collectPointsForPort(document, portId);
+        ModbusRuntimeWorker *worker = runtime.worker;
+        const bool invoked = QMetaObject::invokeMethod(worker, [worker, points]() {
+            worker->reloadPoints(points);
+        }, Qt::QueuedConnection);
+        if (!invoked)
+        {
+            emit portError(portId,
+                           QStringLiteral("无法热更新寄存器映射"),
+                           QStringLiteral("QMetaObject::invokeMethod 失败"));
+            continue;
+        }
+        emit portDiagnostics(portId,
+                             QStringLiteral("热更新映射：启用绑定分组点位 %1 个")
+                                 .arg(points.size()));
     }
 }
 
