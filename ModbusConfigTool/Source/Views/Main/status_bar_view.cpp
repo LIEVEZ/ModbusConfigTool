@@ -1,4 +1,4 @@
-﻿#include "status_bar_view.h"
+#include "status_bar_view.h"
 
 #include "Domain/Models/connection_port.h"
 #include "Domain/Models/register_point.h"

@@ -1,8 +1,11 @@
 #ifndef MODBUS_RUNTIME_WORKER_H
 #define MODBUS_RUNTIME_WORKER_H
 
+#include "Domain/Models/comm_frame.h"
 #include "Domain/Models/project_document.h"
+#include "Infrastructure/Modbus/modbus_register_store.h"
 
+#include <QModbusDataUnit>
 #include <QObject>
 
 class QModbusServer;
@@ -25,14 +28,20 @@ signals:
     void stopped();
     void failed(const QString &message, const QString &detail);
     void valueChanged(const QString &pointId, const RegisterValue &value);
+    void diagnostics(const QString &message);
+    void frameCaptured(const CommFrame &frame);
 
 private:
+    void handleDataWritten(QModbusDataUnit::RegisterType table, int address, int size);
+
     QModbusServer *m_server = nullptr;
     StrategyEngine *m_strategyEngine = nullptr;
     QHash<QString, RegisterPoint> m_points;
+    ModbusRegisterStore m_store;
 };
 
 Q_DECLARE_METATYPE(ServerProfile)
 Q_DECLARE_METATYPE(RegisterPoint)
+Q_DECLARE_METATYPE(QList<RegisterPoint>)
 
 #endif

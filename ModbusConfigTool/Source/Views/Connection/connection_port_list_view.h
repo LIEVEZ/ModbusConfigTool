@@ -1,4 +1,4 @@
-﻿#ifndef CONNECTION_PORT_LIST_VIEW_H
+#ifndef CONNECTION_PORT_LIST_VIEW_H
 #define CONNECTION_PORT_LIST_VIEW_H
 
 #include "Application/Runtime/runtime_service.h"

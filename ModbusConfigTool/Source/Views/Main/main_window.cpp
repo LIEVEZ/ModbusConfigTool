@@ -10,6 +10,8 @@
 #include "Views/Groups/group_realtime_panel.h"
 #include "Views/Groups/group_register_config_dialog.h"
 #include "Views/Logging/event_log_view.h"
+#include "Views/Monitor/comm_monitor_dialog.h"
+#include "Views/Monitor/comm_monitor_view.h"
 #include "Views/Main/status_bar_view.h"
 
 #include <QCloseEvent>
@@ -20,6 +22,7 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QLabel>
+#include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -31,6 +34,8 @@
 #include <QToolButton>
 #include <QTimer>
 #include <QUuid>
+#include <QPair>
+#include <QVector>
 
 MainWindow::MainWindow(MainWindowViewModel *viewModel, QWidget *parent)
     : QMainWindow(parent),
@@ -141,6 +146,12 @@ void MainWindow::buildMenus()
     QAction *importGroupMenuAction = organization->addAction(QStringLiteral("导入分组"));
     importGroupMenuAction->setObjectName(QStringLiteral("importGroupMenuAction"));
 
+
+    QMenu *commMonitorMenu = menuBar()->addMenu(QStringLiteral("通信监控"));
+    commMonitorMenu->setObjectName(QStringLiteral("commMonitorMenu"));
+    QAction *commMonitorAction = commMonitorMenu->addAction(QStringLiteral("打开通信监控"));
+    commMonitorAction->setObjectName(QStringLiteral("commMonitorAction"));
+    commMonitorAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+M")));
     QMenu *connection = menuBar()->addMenu(QStringLiteral("连接配置"));
     connection->setObjectName(QStringLiteral("connectionConfigMenu"));
     QAction *addPortAction = connection->addAction(QStringLiteral("新增端口"));
@@ -167,6 +178,7 @@ void MainWindow::buildMenus()
             m_portListView->focusPortPanel();
         }
     });
+    connect(commMonitorAction, &QAction::triggered, this, &MainWindow::openCommMonitor);
     connect(aboutAction, &QAction::triggered, this, [this]() {
         QMessageBox::about(
             this,
@@ -244,6 +256,16 @@ void MainWindow::connectActions()
                               QStringLiteral("端口 %1\n%2\n%3").arg(portId, message, detail));
     });
 
+    connect(m_viewModel, &MainWindowViewModel::runtimeDiagnostics, this,
+            [this](const QString &portId, const QString &message)
+    {
+        m_logView->appendMessage(QStringLiteral("INFO"), QStringLiteral("MODBUS"),
+                                 QStringLiteral("端口 %1: %2").arg(portId, message));
+    });
+
+    connect(m_viewModel, &MainWindowViewModel::commFrameCaptured,
+            this, &MainWindow::onCommFrameCaptured);
+
     // Port list view signals
     connect(m_portListView, &ConnectionPortListView::addPortRequested, this, &MainWindow::addPort);
     connect(m_portListView, &ConnectionPortListView::editPortRequested, this, &MainWindow::editPort);
@@ -252,6 +274,11 @@ void MainWindow::connectActions()
             this, &MainWindow::startPort);
     connect(m_portListView, &ConnectionPortListView::stopPortRequested,
             this, &MainWindow::stopPort);
+    connect(m_portListView, &ConnectionPortListView::portSelected, this,
+            [this](const QString &portId)
+    {
+        setMonitoredPort(portId);
+    });
 
     // Canvas view signals
     connect(m_canvasView, &GroupCanvasView::groupMoved, this,
@@ -349,6 +376,7 @@ void MainWindow::refreshDocument()
     m_canvasView->setModel(document, m_portStates);
     updateGroupCount(document.groups.size());
     updatePortCount(document.ports.size());
+    syncCommMonitorPorts();
     if (!m_selectedGroupId.isEmpty())
     {
         m_canvasView->setSelectedGroup(m_selectedGroupId);
@@ -392,6 +420,51 @@ void MainWindow::newProject() { if (confirmDiscardChanges()) { m_viewModel->newP
 
 void MainWindow::tryOpenStartupProject()
 {
+    auto openAndAnnounce = [this](const QString &path, const QString &sourceTag) -> bool {
+        const OperationResult result = m_viewModel->openProject(path);
+        if (result.success)
+        {
+            if (m_logView)
+            {
+                m_logView->appendMessage(
+                    QStringLiteral("INFO"),
+                    QStringLiteral("APP"),
+                    QStringLiteral("已自动打开%1：%2").arg(sourceTag, path));
+            }
+            refreshStatus();
+            rebuildRecentMenu();
+            return true;
+        }
+
+        if (m_logView)
+        {
+            m_logView->appendMessage(
+                QStringLiteral("WARN"),
+                QStringLiteral("APP"),
+                QStringLiteral("自动打开%1失败：%2（%3）")
+                    .arg(sourceTag, result.message, path));
+        }
+        return false;
+    };
+
+    // 1) 优先打开最近工程（按最近使用顺序，跳过已不存在的路径）
+    const QStringList recentPaths = m_viewModel->recentFiles();
+    for (const QString &recentPath : recentPaths)
+    {
+        if (!QFileInfo::exists(recentPath))
+        {
+            m_viewModel->removeRecentFile(recentPath);
+            continue;
+        }
+        if (openAndAnnounce(recentPath, QStringLiteral("最近工程")))
+        {
+            return;
+        }
+        // 打不开的最近项从列表移除，继续尝试下一项
+        m_viewModel->removeRecentFile(recentPath);
+    }
+
+    // 2) 没有可用最近工程时，回退运行目录默认工程
     const QStringList searchDirs = {
         QCoreApplication::applicationDirPath(),
         QDir::currentPath()
@@ -440,30 +513,11 @@ void MainWindow::tryOpenStartupProject()
 
     if (chosenPath.isEmpty())
     {
+        // 3) 仍没有则保持默认空工程
         return;
     }
 
-    const OperationResult result = m_viewModel->openProject(chosenPath);
-    if (result.success)
-    {
-        if (m_logView)
-        {
-            m_logView->appendMessage(
-                QStringLiteral("INFO"),
-                QStringLiteral("APP"),
-                QStringLiteral("已加载运行目录工程：%1").arg(chosenPath));
-        }
-        refreshStatus();
-        rebuildRecentMenu();
-    }
-    else if (m_logView)
-    {
-        m_logView->appendMessage(
-            QStringLiteral("WARN"),
-            QStringLiteral("APP"),
-            QStringLiteral("运行目录工程打开失败：%1（%2）")
-                .arg(result.message, chosenPath));
-    }
+    openAndAnnounce(chosenPath, QStringLiteral("默认工程"));
 }
 void MainWindow::openProject()
 {
@@ -497,7 +551,7 @@ void MainWindow::addGroup()
     }
 }
 
-QString MainWindow::uniqueGroupName(const QString &preferredName) const
+QString MainWindow::uniqueGroupName(const QString &preferredName, const QString &ignoreGroupId) const
 {
     QString base = preferredName.trimmed();
     if (base.isEmpty())
@@ -509,6 +563,10 @@ QString MainWindow::uniqueGroupName(const QString &preferredName) const
     auto nameExists = [&](const QString &name) {
         for (const RegisterGroup &group : doc.groups)
         {
+            if (!ignoreGroupId.isEmpty() && group.id == ignoreGroupId)
+            {
+                continue;
+            }
             if (group.name == name)
             {
                 return true;
@@ -549,40 +607,26 @@ void MainWindow::importGroup()
         QStringLiteral("#c08532"), QStringLiteral("#8b5cf6"), QStringLiteral("#cf2d56")
     };
 
+    const QFileInfo fileInfo(path);
     RegisterGroup group;
     group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    group.name = uniqueGroupName(QFileInfo(path).completeBaseName());
+    // 分组名称直接取导入文件名（不含扩展名），重名自动加后缀。
+    group.name = uniqueGroupName(fileInfo.completeBaseName());
     group.color = palette.at(m_viewModel->document().groups.size() % palette.size());
     group.enabled = true;
-    group.description = QStringLiteral("由 CSV 导入：%1").arg(QFileInfo(path).fileName());
+    group.isDefault = false;
+    group.canvasX = 0;
+    group.canvasY = 0;
+    group.description = QStringLiteral("由 CSV 导入：%1").arg(fileInfo.fileName());
 
-    GroupEditorDialog dialog(group, this);
-    dialog.setWindowTitle(QStringLiteral("导入分组"));
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        return;
-    }
-
-    RegisterGroup edited = dialog.group();
-    edited.id = group.id;
-    edited.isDefault = false;
-    edited.enabled = true;
-    edited.canvasX = 0;
-    edited.canvasY = 0;
-    if (edited.name.trimmed().isEmpty())
-    {
-        QMessageBox::warning(this, QStringLiteral("导入分组"), QStringLiteral("分组名称不能为空"));
-        return;
-    }
-
-    const OperationResult result = m_viewModel->importGroupFromCsv(path, edited);
+    const OperationResult result = m_viewModel->importGroupFromCsv(path, group);
     const QString successMessage = result.message.isEmpty()
         ? QStringLiteral("分组已导入")
         : result.message;
     showResult(result, successMessage);
     if (result.success)
     {
-        m_selectedGroupId = edited.id;
+        m_selectedGroupId = group.id;
         scheduleRefresh();
     }
 }
@@ -651,7 +695,53 @@ void MainWindow::showGroupRealtime(const QString &groupId)
     auto *panel = new GroupRealtimePanel(groupId, m_viewModel->document(), this);
     panel->setAttribute(Qt::WA_DeleteOnClose);
     connect(panel, &GroupRealtimePanel::configureRegistersRequested, this, &MainWindow::showGroupConfig);
-    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged, panel, [panel, this](const QString &)
+    connect(panel, &GroupRealtimePanel::valueWriteRequested, this,
+            [this](const QString &pointId, const RegisterValue &value)
+    {
+        QString protocolKey;
+        QString pointName;
+        for (const RegisterPoint &point : m_viewModel->document().registers)
+        {
+            if (point.id == pointId)
+            {
+                protocolKey = point.protocolKey;
+                pointName = point.name;
+                break;
+            }
+        }
+
+        m_viewModel->writePoint(pointId, value);
+
+        if (m_logView)
+        {
+            const QString keyText = protocolKey.isEmpty()
+                ? QStringLiteral("（空）")
+                : protocolKey;
+            m_logView->appendMessage(
+                QStringLiteral("INFO"),
+                QStringLiteral("RUNTIME"),
+                QStringLiteral("手动写入实时值：协议键=%1，名称=%2，值=%3")
+                    .arg(keyText, pointName, value.toDisplayString()));
+        }
+    });
+    connect(panel, &GroupRealtimePanel::bulkValuesWriteRequested, this,
+            [this](const QList<QPair<QString, RegisterValue>> &values)
+    {
+        for (const auto &item : values)
+        {
+            m_viewModel->writePoint(item.first, item.second);
+        }
+        if (m_logView)
+        {
+            m_logView->appendMessage(
+                QStringLiteral("INFO"),
+                QStringLiteral("RUNTIME"),
+                QStringLiteral("随机写入实时值：共 %1 个点位（均在 min/max 范围内）")
+                    .arg(values.size()));
+        }
+    });
+    connect(m_viewModel, &MainWindowViewModel::runtimeValueChanged, panel,
+            [panel, this](const QString &)
     {
         panel->updateValues(m_viewModel->document());
     });
@@ -729,13 +819,21 @@ void MainWindow::importGroupCsv(const QString &groupId)
                                                       QString(), QStringLiteral("CSV 文件 (*.csv)"));
     if (path.isEmpty()) return;
 
-    const bool replaceGroup = QMessageBox::question(this, QStringLiteral("导入模式"),
-                                                    QStringLiteral("是否替换分组中的现有寄存器？\n\n"
-                                                                   "「是」= 清空后导入\n"
-                                                                   "「否」= 追加到现有寄存器"))
-                              == QMessageBox::Yes;
+    QMessageBox modeBox(this);
+    modeBox.setWindowTitle(QStringLiteral("导入模式"));
+    modeBox.setIcon(QMessageBox::Question);
+    modeBox.setText(QStringLiteral("是否替换分组中的现有寄存器？\n\n"
+                                   "「是」= 清空后导入\n"
+                                   "「否」= 追加到现有寄存器"));
+    modeBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    modeBox.setButtonText(QMessageBox::Yes, QStringLiteral("是"));
+    modeBox.setButtonText(QMessageBox::No, QStringLiteral("否"));
+    const bool replaceGroup = modeBox.exec() == QMessageBox::Yes;
 
-    showResult(m_viewModel->importCsvIntoGroup(groupId, path, replaceGroup), QStringLiteral("CSV 已导入"));
+    // 导入到已有分组时，分组名称同步为 CSV 文件名。
+    const QString groupName = uniqueGroupName(QFileInfo(path).completeBaseName(), groupId);
+    showResult(m_viewModel->importCsvIntoGroup(groupId, path, replaceGroup, groupName),
+               QStringLiteral("CSV 已导入"));
 }
 
 void MainWindow::exportGroupCsv(const QString &groupId)
@@ -852,4 +950,123 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
     m_viewModel->stopAllPorts();
     event->accept();
+}
+
+void MainWindow::openCommMonitor()
+{
+    if (!m_commMonitor)
+    {
+        m_commMonitor = new CommMonitorDialog(this);
+        m_commMonitor->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_commMonitor, &QObject::destroyed, this, [this]() {
+            m_commMonitor = nullptr;
+        });
+        connect(m_commMonitor->view(), &CommMonitorView::monitorPortChanged, this,
+                [this](const QString &portId)
+        {
+            setMonitoredPort(portId, false);
+        });
+        if (m_monitoredPortId.isEmpty() && m_portListView)
+        {
+            m_monitoredPortId = m_portListView->selectedPortId();
+            m_monitoredPortName = portNameById(m_monitoredPortId);
+        }
+        syncCommMonitorPorts();
+        updateCommMonitorPort();
+    }
+    m_commMonitor->show();
+    m_commMonitor->raise();
+    m_commMonitor->activateWindow();
+}
+
+void MainWindow::setMonitoredPort(const QString &portId)
+{
+    setMonitoredPort(portId, true);
+}
+
+void MainWindow::setMonitoredPort(const QString &portId, bool syncCombo)
+{
+    const bool changed = (m_monitoredPortId != portId);
+    m_monitoredPortId = portId;
+    m_monitoredPortName = portNameById(portId);
+    if (!m_commMonitor)
+    {
+        return;
+    }
+    if (changed)
+    {
+        m_commMonitor->view()->clearFrames();
+    }
+    if (syncCombo)
+    {
+        m_commMonitor->view()->setSelectedPortId(portId);
+    }
+    updateCommMonitorPort();
+}
+
+void MainWindow::syncCommMonitorPorts()
+{
+    if (!m_commMonitor || !m_viewModel)
+    {
+        return;
+    }
+
+    QVector<QPair<QString, QString>> ports;
+    for (const ConnectionPort &port : m_viewModel->document().ports)
+    {
+        ports.append(qMakePair(port.id, port.name));
+    }
+    m_commMonitor->view()->setPorts(ports, m_monitoredPortId);
+    m_monitoredPortId = m_commMonitor->view()->selectedPortId();
+    m_monitoredPortName = portNameById(m_monitoredPortId);
+    updateCommMonitorPort();
+}
+
+void MainWindow::updateCommMonitorPort()
+{
+    if (!m_commMonitor)
+    {
+        return;
+    }
+
+    const QString title = m_monitoredPortName.isEmpty()
+        ? QStringLiteral("通信监控 - 未选择端口")
+        : QStringLiteral("通信监控 - %1").arg(m_monitoredPortName);
+    m_commMonitor->setWindowTitle(title);
+    m_commMonitor->view()->setHint(m_monitoredPortId.isEmpty()
+        ? QStringLiteral("请选择要监控的连接端口")
+        : QStringLiteral("仅显示所选端口的收发报文，可在上方下拉切换"));
+}
+
+void MainWindow::onCommFrameCaptured(const QString &portId, const CommFrame &frame)
+{
+    if (!m_commMonitor || !m_commMonitor->isVisible())
+    {
+        return;
+    }
+    if (portId != m_monitoredPortId)
+    {
+        return;
+    }
+    if (m_commMonitor->view()->isPaused())
+    {
+        return;
+    }
+    m_commMonitor->view()->appendFrame(frame);
+}
+
+QString MainWindow::portNameById(const QString &portId) const
+{
+    if (portId.isEmpty() || !m_viewModel)
+    {
+        return QString();
+    }
+    for (const ConnectionPort &port : m_viewModel->document().ports)
+    {
+        if (port.id == portId)
+        {
+            return port.name;
+        }
+    }
+    return QString();
 }

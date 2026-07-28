@@ -9,9 +9,11 @@
 RuntimeService::RuntimeService(QObject *parent) : QObject(parent)
 {
     qRegisterMetaType<ServerProfile>();
+    qRegisterMetaType<RegisterPoint>();
     qRegisterMetaType<QList<RegisterPoint>>();
     qRegisterMetaType<RegisterValue>();
     qRegisterMetaType<RuntimeState>();
+    qRegisterMetaType<CommFrame>();
 }
 
 RuntimeService::~RuntimeService()
@@ -30,12 +32,19 @@ QList<RegisterPoint> RuntimeService::collectPointsForPort(const ProjectDocument 
     QSet<QString> enabledGroups;
     for (const RegisterGroup &group : document.groups)
     {
-        if (group.portId == portId && group.enabled) { enabledGroups.insert(group.id); }
+        if (group.portId == portId && group.enabled)
+        {
+            enabledGroups.insert(group.id);
+        }
     }
     QList<RegisterPoint> points;
     for (const RegisterPoint &point : document.registers)
     {
-        if (enabledGroups.contains(point.groupId) && point.enabled) { points.append(point); }
+        // 点位启用字段已废弃：只要分组启用，导入点位全部参与映射。
+        if (enabledGroups.contains(point.groupId))
+        {
+            points.append(point);
+        }
     }
     return points;
 }
@@ -43,12 +52,19 @@ QList<RegisterPoint> RuntimeService::collectPointsForPort(const ProjectDocument 
 void RuntimeService::startPort(const ProjectDocument &document, const QString &portId)
 {
     PortRuntime &runtime = m_ports[portId];
-    if (runtime.state == RuntimeState::Running || runtime.state == RuntimeState::Starting) { return; }
+    if (runtime.state == RuntimeState::Running || runtime.state == RuntimeState::Starting)
+    {
+        return;
+    }
 
     const ConnectionPort *port = nullptr;
     for (const ConnectionPort &candidate : document.ports)
     {
-        if (candidate.id == portId) { port = &candidate; break; }
+        if (candidate.id == portId)
+        {
+            port = &candidate;
+            break;
+        }
     }
     if (!port)
     {
@@ -75,22 +91,62 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
         });
         connect(runtime.worker, &ModbusRuntimeWorker::valueChanged,
                 this, &RuntimeService::valueChanged);
+        connect(runtime.worker, &ModbusRuntimeWorker::diagnostics, this,
+                [this, portId](const QString &message)
+        {
+            emit portDiagnostics(portId, message);
+        });
+        connect(runtime.worker, &ModbusRuntimeWorker::frameCaptured, this,
+                [this, portId](const CommFrame &frame)
+        {
+            emit frameCaptured(portId, frame);
+        });
 
         runtime.thread->start();
     }
 
     setPortState(portId, RuntimeState::Starting);
     const QList<RegisterPoint> points = collectPointsForPort(document, portId);
-    QMetaObject::invokeMethod(runtime.worker, "start", Qt::QueuedConnection,
-                              Q_ARG(ServerProfile, port->profile),
-                              Q_ARG(QList<RegisterPoint>, points));
+    emit portDiagnostics(portId,
+                         QStringLiteral("准备启动：绑定启用分组点位 %1 个，端口从站=%2，%3 %4:%5")
+                             .arg(points.size())
+                             .arg(port->profile.slaveAddress)
+                             .arg(port->profile.connectionType == ConnectionType::Tcp
+                                      ? QStringLiteral("TCP")
+                                      : QStringLiteral("RTU"))
+                             .arg(port->profile.connectionType == ConnectionType::Tcp
+                                      ? port->profile.tcpHost
+                                      : port->profile.serialPort)
+                             .arg(port->profile.connectionType == ConnectionType::Tcp
+                                      ? port->profile.tcpPort
+                                      : port->profile.baudRate));
+
+    // 使用 functor 排队调用，避免 QList<RegisterPoint> 通过 Q_ARG 跨线程拷贝异常
+    const ServerProfile profile = port->profile;
+    ModbusRuntimeWorker *worker = runtime.worker;
+    const bool invoked = QMetaObject::invokeMethod(worker, [worker, profile, points]() {
+        worker->start(profile, points);
+    }, Qt::QueuedConnection);
+    if (!invoked)
+    {
+        setPortState(portId, RuntimeState::Fault);
+        emit portError(portId,
+                       QStringLiteral("无法调度运行时启动"),
+                       QStringLiteral("QMetaObject::invokeMethod 失败"));
+    }
 }
 
 void RuntimeService::stopPort(const QString &portId)
 {
-    if (!m_ports.contains(portId)) { return; }
+    if (!m_ports.contains(portId))
+    {
+        return;
+    }
     PortRuntime &runtime = m_ports[portId];
-    if (!runtime.worker) { return; }
+    if (!runtime.worker)
+    {
+        return;
+    }
     if (runtime.state == RuntimeState::Running || runtime.state == RuntimeState::Starting)
     {
         QMetaObject::invokeMethod(runtime.worker, "stop", Qt::QueuedConnection);
@@ -139,7 +195,10 @@ void RuntimeService::teardownPort(const QString &portId)
 void RuntimeService::setPortState(const QString &portId, RuntimeState state)
 {
     PortRuntime &runtime = m_ports[portId];
-    if (runtime.state == state) { return; }
+    if (runtime.state == state)
+    {
+        return;
+    }
     runtime.state = state;
     emit portStateChanged(portId, state);
 }

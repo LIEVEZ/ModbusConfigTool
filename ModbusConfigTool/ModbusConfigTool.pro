@@ -10,10 +10,12 @@ SOURCES += $$files($$PWD/Source/*.cpp, true)
 HEADERS += $$files($$PWD/Source/*.h, true)
 RESOURCES += $$PWD/Source/Resources/Resources.qrc
 
-DESTDIR = $$PWD/bin
+# All build outputs go under build/
+DESTDIR = $$PWD/build/bin
 OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR = $$PWD/build/moc
 RCC_DIR = $$PWD/build/rcc
+UI_DIR = $$PWD/build/ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

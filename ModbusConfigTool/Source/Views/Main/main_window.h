@@ -2,12 +2,14 @@
 #define MAIN_WINDOW_H
 
 #include "Application/Runtime/runtime_service.h"
+#include "Domain/Models/comm_frame.h"
 
 #include <QHash>
 #include <QMainWindow>
 
 class EventLogView;
 class ConnectionPortListView;
+class CommMonitorDialog;
 class GroupCanvasView;
 class GroupRealtimePanel;
 class GroupRegisterConfigDialog;
@@ -45,7 +47,7 @@ private:
     bool saveProject(bool saveAs = false);
     void addGroup();
     void importGroup();
-    QString uniqueGroupName(const QString &preferredName) const;
+    QString uniqueGroupName(const QString &preferredName, const QString &ignoreGroupId = QString()) const;
     void addPort();
     void editPort(const QString &portId);
     void removePort(const QString &portId);
@@ -65,12 +67,20 @@ private:
     void tryOpenStartupProject();
     void updateGroupCount(int count);
     void updatePortCount(int count);
+    void openCommMonitor();
+    void setMonitoredPort(const QString &portId);
+    void setMonitoredPort(const QString &portId, bool syncCombo);
+    void syncCommMonitorPorts();
+    void updateCommMonitorPort();
+    void onCommFrameCaptured(const QString &portId, const CommFrame &frame);
+    QString portNameById(const QString &portId) const;
 
     MainWindowViewModel *m_viewModel = nullptr;
     ConnectionPortListView *m_portListView = nullptr;
     GroupCanvasView *m_canvasView = nullptr;
     EventLogView *m_logView = nullptr;
     StatusBarView *m_statusView = nullptr;
+    CommMonitorDialog *m_commMonitor = nullptr;
     QToolBar *m_workspaceToolBar = nullptr;
     QLabel *m_groupCountBadge = nullptr;
     QLabel *m_portCountBadge = nullptr;
@@ -78,6 +88,8 @@ private:
     QMenu *m_recentMenu = nullptr;
     QHash<QString, RuntimeState> m_portStates;
     QString m_selectedGroupId;
+    QString m_monitoredPortId;
+    QString m_monitoredPortName;
     bool m_refreshScheduled = false;
 };
 

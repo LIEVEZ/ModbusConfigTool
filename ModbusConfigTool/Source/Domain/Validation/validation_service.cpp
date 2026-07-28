@@ -41,12 +41,7 @@ OperationResult ValidationService::validateRegister(const RegisterPoint &point)
                                      QStringLiteral("name"),
                                      QStringLiteral("寄存器名称不能为空"));
     }
-    if (point.protocolKey.trimmed().isEmpty())
-    {
-        return OperationResult::fail(QStringLiteral("empty_protocol_key"),
-                                     QStringLiteral("protocolKey"),
-                                     QStringLiteral("协议键不能为空"));
-    }
+    // 协议键允许为空（CSV 未填时保持空白，不做默认生成）。
     if (point.slaveAddress < 1 || point.slaveAddress > 247)
     {
         return OperationResult::fail(QStringLiteral("invalid_slave"),
@@ -159,7 +154,6 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
         }
     }
 
-    QSet<QString> protocolKeys;
     for (int index = 0; index < document.registers.size(); ++index)
     {
         const RegisterPoint &point = document.registers.at(index);
@@ -171,13 +165,7 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                                          QStringLiteral("groupId"),
                                          QStringLiteral("寄存器引用的分组不存在"));
         }
-        if (protocolKeys.contains(point.protocolKey))
-        {
-            return OperationResult::fail(QStringLiteral("duplicate_protocol_key"),
-                                         QStringLiteral("protocolKey"),
-                                         QStringLiteral("协议键不允许重复"));
-        }
-        protocolKeys.insert(point.protocolKey);
+
 
         const quint32 pointEnd = quint32(point.address) + point.registerCount - 1U;
         if (pointEnd > 65535U)

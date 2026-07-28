@@ -1,4 +1,4 @@
-﻿#ifndef GROUP_CARD_WIDGET_H
+#ifndef GROUP_CARD_WIDGET_H
 #define GROUP_CARD_WIDGET_H
 
 #include <QList>

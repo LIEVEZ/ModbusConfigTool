@@ -1,4 +1,4 @@
-﻿#ifndef GROUP_CANVAS_VIEW_H
+#ifndef GROUP_CANVAS_VIEW_H
 #define GROUP_CANVAS_VIEW_H
 
 #include "Application/Runtime/runtime_service.h"

@@ -279,10 +279,31 @@ OperationResult RegisterService::moveGroup(const QString &groupId, int x, int y)
 
 OperationResult RegisterService::importCsvIntoGroup(const QString &groupId,
                                                     const CsvImportResult &imported,
-                                                    bool replaceGroup)
+                                                    bool replaceGroup,
+                                                    const QString &groupName)
 {
     if (!imported.result.success) { return imported.result; }
     ProjectDocument candidate = m_projectService->document();
+    bool groupFound = false;
+    for (RegisterGroup &group : candidate.groups)
+    {
+        if (group.id != groupId)
+        {
+            continue;
+        }
+        groupFound = true;
+        if (!groupName.trimmed().isEmpty())
+        {
+            group.name = groupName.trimmed();
+        }
+        break;
+    }
+    if (!groupFound)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("groupId"),
+                                     QStringLiteral("目标分组不存在"));
+    }
     if (replaceGroup)
     {
         for (int i = candidate.registers.size() - 1; i >= 0; --i)

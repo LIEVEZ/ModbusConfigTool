@@ -28,6 +28,10 @@ MainWindowViewModel::MainWindowViewModel(QObject *parent) : QObject(parent)
             this, &MainWindowViewModel::runtimeStateChanged);
     connect(m_runtimeService, &RuntimeService::portError,
             this, &MainWindowViewModel::runtimeError);
+    connect(m_runtimeService, &RuntimeService::portDiagnostics,
+            this, &MainWindowViewModel::runtimeDiagnostics);
+    connect(m_runtimeService, &RuntimeService::frameCaptured,
+            this, &MainWindowViewModel::commFrameCaptured);
     connect(m_runtimeService, &RuntimeService::valueChanged,
             m_projectService, &ProjectService::updateRuntimeValue);
 }
@@ -83,11 +87,14 @@ OperationResult MainWindowViewModel::addRegister(const RegisterPoint &point) { r
 OperationResult MainWindowViewModel::updateRegister(const RegisterPoint &point) { return m_registerService->updateRegister(point); }
 OperationResult MainWindowViewModel::removeRegisters(const QStringList &ids) { return m_registerService->removeRegisters(ids); }
 
-OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId, const QString &path, bool replaceGroup)
+OperationResult MainWindowViewModel::importCsvIntoGroup(const QString &groupId,
+                                                        const QString &path,
+                                                        bool replaceGroup,
+                                                        const QString &groupName)
 {
     const CsvImportResult imported = m_csvGateway->importFile(path, document());
     if (!imported.result.success) { return imported.result; }
-    OperationResult result = m_registerService->importCsvIntoGroup(groupId, imported, replaceGroup);
+    OperationResult result = m_registerService->importCsvIntoGroup(groupId, imported, replaceGroup, groupName);
     if (result.success)
     {
         if (!imported.result.message.isEmpty())
@@ -151,5 +158,6 @@ OperationResult MainWindowViewModel::applyRegisterPatch(const QStringList &ids, 
 void MainWindowViewModel::writePoint(const QString &pointId, const RegisterValue &value)
 {
     m_projectService->updateRuntimeValue(pointId, value);
+    m_runtimeService->writePoint(pointId, value);
     m_projectService->markDirty();
 }

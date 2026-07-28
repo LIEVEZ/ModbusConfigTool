@@ -1,4 +1,4 @@
-﻿#ifndef GROUP_EDITOR_DIALOG_H
+#ifndef GROUP_EDITOR_DIALOG_H
 #define GROUP_EDITOR_DIALOG_H
 
 #include "Domain/Models/register_group.h"

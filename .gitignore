@@ -1,90 +1,84 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
+# =========================
+# Build outputs
+# =========================
 build/
 Build/
 build-*/
+bin/
+debug/
+release/
+Debug/
+Release/
 
-# qmake generated files
+# qmake generated
 Makefile
-Makefile.Debug
-Makefile.Release
+Makefile.*
 .qmake.stash
-object_script.*.Debug
-object_script.*.Release
+object_script.*
 *.pro.user
 *.pro.user.*
 
-# CMake generated files
+# Object / intermediate files
+*.o
+*.obj
+*.lo
+*.slo
+*.a
+*.lib
+*.dll
+*.so
+*.so.*
+*.dylib
+*.exe
+*.out
+*.app
+*.pdb
+*.ilk
+*.d
+*.gch
+*.pch
+*.dwo
+
+# Local build logs / temp
+build_*.txt
+make_*.txt
+test_*.txt
+*_done.txt
+link_*.txt
+gap_*.txt
+csv_*.txt
+
+# CMake
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 install_manifest.txt
 compile_commands.json
 
-# Temporary files
+# Temp files
 *.tmp
 *.log
 *.bak
 *.swp
+.cache/
+Testing/
 
 # vcpkg
 vcpkg_installed/
 
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
-Scripts/
-ModbusConfigTool/Tests/build/
-ModbusConfigTool/Tests/*.exe
-ModbusConfigTool/Tests/Makefile*
-ModbusConfigTool/Tests/.qmake.stash
-bin/
+# Local docs / data
 docs/
 .superpowers/
-
-# test data files
+Scripts/
 *.csv
+
+# App local build dirs
+ModbusConfigTool/build/
+ModbusConfigTool/bin/
+ModbusConfigTool/Makefile*
+ModbusConfigTool/.qmake.stash
+ModbusConfigTool/object_script.*
+ModbusConfigTool/*.pro.user
+
+# Ignore entire Tests folder
+ModbusConfigTool/Tests/

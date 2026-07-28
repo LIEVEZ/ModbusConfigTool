@@ -1,4 +1,4 @@
-﻿#include "register_table_model.h"
+#include "register_table_model.h"
 
 #include <QBrush>
 
@@ -40,7 +40,6 @@ QVariant RegisterTableModel::data(const QModelIndex &index, int role) const
         return QVariant();
     }
     const RegisterPoint &point = m_document->registers.at(index.row());
-    if (role == Qt::ForegroundRole && !point.enabled) { return QBrush(QColor(QStringLiteral("#8a8983"))); }
     if (role != Qt::DisplayRole && role != Qt::EditRole) { return QVariant(); }
     switch (index.column())
     {
@@ -61,7 +60,7 @@ QVariant RegisterTableModel::data(const QModelIndex &index, int role) const
     case 14: return point.protocolKey;
     case 15: return point.category;
     case 16: return point.label;
-    case 17: return point.enabled ? QStringLiteral("是") : QStringLiteral("否");
+    case 17: return QStringLiteral("是");
     case 18: return strategyTypeToString(point.strategy.type);
     case 19: return QString();
     default: return QVariant();

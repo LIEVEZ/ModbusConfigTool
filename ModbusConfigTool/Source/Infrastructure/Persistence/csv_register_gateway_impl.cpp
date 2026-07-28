@@ -271,11 +271,6 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
     }
 
     output.groups = current.groups;
-    QSet<QString> usedProtocolKeys;
-    for (const RegisterPoint &existing : current.registers)
-    {
-        usedProtocolKeys.insert(existing.protocolKey);
-    }
 
     int lineNumber = 1;
     int skippedRows = 0;
@@ -395,6 +390,9 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         point.registerCount = expectedCount;
         point.minimumValue = ProjectFactory::minimumFor(point.dataType);
         point.maximumValue = ProjectFactory::maximumFor(point.dataType);
+        point.name.clear();
+        point.protocolKey.clear();
+        point.writeFunctionCode = 0;
 
         uint slaveValue = 1;
         if (hasAnyHeader(headers, slaveAliases))
@@ -411,33 +409,9 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         }
         point.slaveAddress = quint8(slaveValue);
 
-        point.name = field(nameAliases);
-        if (point.name.trimmed().isEmpty())
-        {
-            point.name = QStringLiteral("寄存器_%1").arg(point.address);
-        }
-
-        const QString rawProtocolKey = field(protocolAliases);
-        QString protocolKey = rawProtocolKey;
-        if (protocolKey.isEmpty())
-        {
-            protocolKey = QStringLiteral("reg_%1_%2").arg(point.slaveAddress).arg(point.address);
-        }
-        if (usedProtocolKeys.contains(protocolKey))
-        {
-            protocolKey = QStringLiteral("%1_%2").arg(protocolKey).arg(point.address);
-            int suffix = 2;
-            while (usedProtocolKeys.contains(protocolKey))
-            {
-                protocolKey = QStringLiteral("%1_%2_%3")
-                                  .arg(rawProtocolKey.isEmpty() ? QStringLiteral("reg") : rawProtocolKey)
-                                  .arg(point.address)
-                                  .arg(suffix);
-                ++suffix;
-            }
-        }
-        point.protocolKey = protocolKey;
-        usedProtocolKeys.insert(protocolKey);
+        // CSV 空字段保持为空；有值则原样保留，不自动生成、不加后缀。
+        point.name = field(nameAliases).trimmed();
+        point.protocolKey = field(protocolAliases).trimmed();
 
         if (hasAnyHeader(headers, endianAliases))
         {
@@ -463,10 +437,13 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
                 }
             }
         }
+        // 写码未填时保持为空（0），不默认填 0x06。
+        point.writeFunctionCode = 0;
         if (hasAnyHeader(headers, writeFcAliases))
         {
+            const QString writeText = field(writeFcAliases).trimmed();
             int writeCode = 0;
-            if (parseIntFlexible(field(writeFcAliases), &writeCode))
+            if (!writeText.isEmpty() && parseIntFlexible(writeText, &writeCode))
             {
                 point.writeFunctionCode = writeCode;
             }
@@ -521,7 +498,7 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         }
         if (hasAnyHeader(headers, enabledAliases))
         {
-            point.enabled = parseBoolFlexible(field(enabledAliases), true);
+            point.enabled = true; // 点位启用字段已废弃，导入后一律生效
         }
         if (headers.contains(QStringLiteral("category")))
         {

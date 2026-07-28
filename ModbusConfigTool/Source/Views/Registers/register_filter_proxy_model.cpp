@@ -1,4 +1,4 @@
-﻿#include "register_filter_proxy_model.h"
+#include "register_filter_proxy_model.h"
 
 RegisterFilterProxyModel::RegisterFilterProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)

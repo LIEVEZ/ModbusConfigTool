@@ -2,6 +2,7 @@
 #define MAIN_WINDOW_VIEW_MODEL_H
 
 #include "Application/Registers/register_patch.h"
+#include "Domain/Models/comm_frame.h"
 #include "Domain/Interfaces/csv_register_gateway.h"
 #include "Domain/Models/project_document.h"
 #include "Domain/Models/connection_port.h"
@@ -57,7 +58,7 @@ public:
     OperationResult addRegister(const RegisterPoint &point);
     OperationResult updateRegister(const RegisterPoint &point);
     OperationResult removeRegisters(const QStringList &ids);
-    OperationResult importCsvIntoGroup(const QString &groupId, const QString &path, bool replaceGroup);
+    OperationResult importCsvIntoGroup(const QString &groupId, const QString &path, bool replaceGroup, const QString &groupName = QString());
     OperationResult importGroupFromCsv(const QString &path, const RegisterGroup &group);
     OperationResult exportGroupCsv(const QString &groupId, const QString &path) const;
 
@@ -74,6 +75,8 @@ signals:
     void recentFilesChanged(const QStringList &paths);
     void runtimeStateChanged(const QString &portId, RuntimeState state);
     void runtimeError(const QString &portId, const QString &message, const QString &detail);
+    void runtimeDiagnostics(const QString &portId, const QString &message);
+    void commFrameCaptured(const QString &portId, const CommFrame &frame);
     void runtimeValueChanged(const QString &pointId);
 
 private:

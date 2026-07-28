@@ -1,6 +1,7 @@
 #ifndef RUNTIME_SERVICE_H
 #define RUNTIME_SERVICE_H
 
+#include "Domain/Models/comm_frame.h"
 #include "Domain/Models/project_document.h"
 
 #include <QHash>
@@ -27,6 +28,8 @@ public:
 signals:
     void portStateChanged(const QString &portId, RuntimeState state);
     void portError(const QString &portId, const QString &message, const QString &detail);
+    void portDiagnostics(const QString &portId, const QString &message);
+    void frameCaptured(const QString &portId, const CommFrame &frame);
     void valueChanged(const QString &pointId, const RegisterValue &value);
 
 private:

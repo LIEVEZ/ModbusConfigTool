@@ -1,4 +1,4 @@
-﻿#ifndef REGISTER_EDITOR_DIALOG_H
+#ifndef REGISTER_EDITOR_DIALOG_H
 #define REGISTER_EDITOR_DIALOG_H
 
 #include "Domain/Models/register_group.h"
@@ -39,7 +39,6 @@ private:
 
     RegisterPoint m_original;
     QLabel *m_subtitleLabel = nullptr;
-    QCheckBox *m_enabled = nullptr;
     QComboBox *m_group = nullptr;
     QLineEdit *m_name = nullptr;
     QLineEdit *m_protocolKey = nullptr;

@@ -27,7 +27,7 @@ struct RegisterPoint
     RegisterValue minimumValue;
     RegisterValue maximumValue = RegisterValue::fromUnsigned64(65535, DataType::UInt16);
     RegisterValue currentValue;
-    bool enabled = true;
+    bool enabled = true; // 已废弃：点位一律生效，保留字段仅兼容旧工程
     StrategySpec strategy;
     QString category;
     QString label;

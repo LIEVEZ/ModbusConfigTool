@@ -1,4 +1,4 @@
-﻿#include "register_editor_dialog.h"
+#include "register_editor_dialog.h"
 
 #include "Domain/Models/project_factory.h"
 #include "Views/Dialogs/strategy_editor_widget.h"
@@ -71,12 +71,7 @@ RegisterEditorDialog::RegisterEditorDialog(const RegisterPoint &point,
     titleBlock->addWidget(titleLabel);
     titleBlock->addWidget(m_subtitleLabel);
 
-    m_enabled = new QCheckBox(QStringLiteral("启用寄存器"), header);
-    m_enabled->setObjectName(QStringLiteral("registerEditorEnableToggle"));
-    m_enabled->setChecked(point.enabled);
-
     headerLayout->addLayout(titleBlock, 1);
-    headerLayout->addWidget(m_enabled, 0, Qt::AlignTop);
 
     auto *scroll = new QScrollArea(this);
     scroll->setObjectName(QStringLiteral("registerEditorScroll"));
@@ -321,7 +316,7 @@ RegisterPoint RegisterEditorDialog::point() const
     output.offset = m_offset->value();
     output.precision = m_precision->value();
     output.unit = m_unit->text().trimmed();
-    output.enabled = m_enabled->isChecked();
+    output.enabled = true;
 
     const ValueResult value = RegisterValue::fromText(output.dataType, m_value->text());
     if (value.result.success)

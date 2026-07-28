@@ -1,4 +1,4 @@
-﻿#ifndef STRATEGY_EDITOR_WIDGET_H
+#ifndef STRATEGY_EDITOR_WIDGET_H
 #define STRATEGY_EDITOR_WIDGET_H
 
 #include "Domain/Models/strategy_spec.h"

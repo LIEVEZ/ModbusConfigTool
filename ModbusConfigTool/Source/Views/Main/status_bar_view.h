@@ -1,4 +1,4 @@
-﻿#ifndef STATUS_BAR_VIEW_H
+#ifndef STATUS_BAR_VIEW_H
 #define STATUS_BAR_VIEW_H
 
 #include "Domain/Models/project_document.h"

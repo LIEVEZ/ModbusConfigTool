@@ -14,7 +14,7 @@ void StrategyEngine::start(const QList<RegisterPoint> &points)
     stop(); m_elapsed.start();
     for (const RegisterPoint &point : points)
     {
-        if (!point.enabled || !point.strategy.enabled || point.strategy.type == StrategyType::None) { continue; }
+        if (!point.strategy.enabled || point.strategy.type == StrategyType::None) { continue; }
         Item item; item.point = point; item.nextDueMs = intervalFor(point);
         item.linearValue = point.strategy.parameters.value(QStringLiteral("startValue"), point.currentValue.toDouble()).toDouble();
         m_items.insert(point.id, item);

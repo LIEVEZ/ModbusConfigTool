@@ -203,9 +203,10 @@ void GroupRegisterConfigDialog::refreshHeader(const ProjectDocument &doc)
 
 void GroupRegisterConfigDialog::applyColumnVisibility()
 {
-    // 对齐 CSV 导入字段：从站/地址/数量/名称/类型/编码/偏移/精度/单位/读码/写码/协议键/标签/启用/操作
+    // 对齐 CSV 导入字段：从站/地址/数量/名称/类型/编码/偏移/精度/单位/读码/写码/协议键/标签/操作
+    // 点位“启用”字段已废弃，导入后默认全部生效，不再展示。
     static const QList<int> visibleColumns = {
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17, kActionColumn
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, kActionColumn
     };
     for (int column = 0; column < m_model->columnCount(); ++column)
     {
@@ -224,7 +225,6 @@ void GroupRegisterConfigDialog::applyColumnVisibility()
     m_table->setColumnWidth(11, 70);
     m_table->setColumnWidth(14, 150);
     m_table->setColumnWidth(16, 90);
-    m_table->setColumnWidth(17, 50);
     m_table->setColumnWidth(kActionColumn, 140);
 }
 

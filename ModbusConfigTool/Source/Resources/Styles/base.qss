@@ -93,6 +93,28 @@ QLabel#eventLogTitle {
     font: 600 17px "Bahnschrift", "Segoe UI";
     background: transparent;
 }
+QWidget#eventLogTitleRow {
+    background: transparent;
+}
+QPushButton#eventLogClearButton {
+    min-width: 52px;
+    min-height: 24px;
+    max-height: 26px;
+    padding: 2px 10px;
+    color: rgba(38, 37, 30, 180);
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 8px;
+    font-size: 12px;
+}
+QPushButton#eventLogClearButton:hover {
+    color: #f54e00;
+    border-color: #f54e00;
+    background: #fffaf7;
+}
+QPushButton#eventLogClearButton:pressed {
+    background: #f3dfd4;
+}
 QPlainTextEdit#eventLogConsole {
     padding: 12px 14px;
     border: 0;
@@ -134,4 +156,40 @@ QLabel#groupCountBadge, QLabel#portCountBadge {
     color: rgba(38, 37, 30, 150);
     background: #f7f7f4;
     border: 1px solid rgba(38, 37, 30, 28);
+}
+
+QDialog#commMonitorDialog {
+    background: #f2f1ed;
+}
+QWidget#commMonitorView,
+QWidget#commMonitorToolBar {
+    background: transparent;
+}
+QComboBox#commMonitorPortCombo {
+    min-height: 28px;
+    min-width: 160px;
+    padding: 4px 8px;
+    background: #ffffff;
+}
+QLabel#commMonitorPortLabel {
+    font: 600 14px "Segoe UI", "Microsoft YaHei";
+    background: transparent;
+}
+QLabel#commMonitorHintLabel {
+    color: rgba(38, 37, 30, 140);
+    font-size: 12px;
+    background: transparent;
+}
+QTableWidget#commMonitorTable {
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 22);
+    gridline-color: rgba(38, 37, 30, 18);
+    font: 12px Consolas, "Cascadia Mono", monospace;
+}
+QTableWidget#commMonitorTable::item {
+    padding: 4px 6px;
+}
+QPushButton#commMonitorPauseButton,
+QPushButton#commMonitorClearButton {
+    min-width: 64px;
 }

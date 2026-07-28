@@ -25,7 +25,8 @@ public:
     OperationResult applyPatch(const QStringList &ids, const RegisterPatch &patch);
     OperationResult importCsvIntoGroup(const QString &groupId,
                                        const CsvImportResult &imported,
-                                       bool replaceGroup);
+                                       bool replaceGroup,
+                                       const QString &groupName = QString());
     OperationResult importCsvAsNewGroup(const RegisterGroup &group,
                                         const CsvImportResult &imported);
 

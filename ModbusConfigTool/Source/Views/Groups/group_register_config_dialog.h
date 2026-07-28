@@ -1,4 +1,4 @@
-﻿#ifndef GROUP_REGISTER_CONFIG_DIALOG_H
+#ifndef GROUP_REGISTER_CONFIG_DIALOG_H
 #define GROUP_REGISTER_CONFIG_DIALOG_H
 
 #include "Domain/Models/project_document.h"

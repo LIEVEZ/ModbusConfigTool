@@ -1,13 +1,17 @@
-﻿#ifndef GROUP_REALTIME_PANEL_H
+#ifndef GROUP_REALTIME_PANEL_H
 #define GROUP_REALTIME_PANEL_H
 
 #include "Domain/Models/project_document.h"
+#include "Domain/Values/register_value.h"
 
 #include <QDialog>
+#include <QList>
+#include <QPair>
 
 class QLabel;
 class QLineEdit;
 class QTableWidget;
+class QTableWidgetItem;
 
 class GroupRealtimePanel : public QDialog
 {
@@ -21,11 +25,22 @@ public:
 
 signals:
     void configureRegistersRequested(const QString &groupId);
+    void valueWriteRequested(const QString &pointId, const RegisterValue &value);
+    void bulkValuesWriteRequested(const QList<QPair<QString, RegisterValue>> &values);
+
+private slots:
+    void onItemChanged(QTableWidgetItem *item);
+    void onSearchTextChanged(const QString &text);
+    void onRandomizeClicked();
 
 private:
     void rebuildTable();
-    void onSearchTextChanged(const QString &text);
     bool matchesSearch(const RegisterPoint &point) const;
+    const RegisterPoint *findPoint(const QString &pointId) const;
+    QList<RegisterPoint *> collectTargetPoints(bool filteredOnly);
+    static RegisterValue randomValueInRange(const RegisterPoint &point);
+
+    static const int kValueColumn = 9;
 
     QString m_groupId;
     ProjectDocument m_document;
@@ -33,6 +48,7 @@ private:
     QTableWidget *m_table = nullptr;
     QLineEdit *m_searchEdit = nullptr;
     QLabel *m_countBadge = nullptr;
+    bool m_updatingTable = false;
 };
 
 #endif

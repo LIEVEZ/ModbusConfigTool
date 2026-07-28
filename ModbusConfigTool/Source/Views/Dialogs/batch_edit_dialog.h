@@ -27,8 +27,6 @@ private:
     QLineEdit *m_category = nullptr;
     QCheckBox *m_changeLabel = nullptr;
     QLineEdit *m_label = nullptr;
-    QCheckBox *m_changeEnabled = nullptr;
-    QComboBox *m_enabled = nullptr;
 };
 
 #endif

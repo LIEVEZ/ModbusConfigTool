@@ -83,7 +83,7 @@ mingw32-make clean
 可执行文件位于：
 
 ```
-ModbusConfigTool/bin/ModbusConfigTool.exe
+ModbusConfigTool/build/bin/ModbusConfigTool.exe
 ```
 
 ## 运行测试
@@ -92,7 +92,7 @@ ModbusConfigTool/bin/ModbusConfigTool.exe
 cd Tests
 qmake Tests.pro
 mingw32-make
-./ModbusConfigTool_Tests.exe
+build/bin/ModbusConfigToolTests.exe
 ```
 
 ## 发布部署
@@ -100,7 +100,7 @@ mingw32-make
 使用 windeployqt 收集依赖：
 
 ```cmd
-windeployqt --release --no-translations ModbusConfigTool/bin/ModbusConfigTool.exe
+windeployqt --release --no-translations ModbusConfigTool/build/bin/ModbusConfigTool.exe
 ```
 
 ## 常见问题
@@ -135,8 +135,7 @@ ModbusConfigTool/
 ├── Tests/
 │   ├── Unit/             # 单元测试
 │   └── Integration/      # 集成测试
-├── bin/                  # 输出目录
-└── build/                # 中间文件
+└── build/                # 编译输出（bin/obj/moc/rcc）
 ```
 
 ## 更多信息

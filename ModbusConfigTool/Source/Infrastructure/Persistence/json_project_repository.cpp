@@ -93,7 +93,7 @@ RegisterPoint pointFromJson(const QJsonObject &object)
     point.minimumValue = valueFromJson(object.value(QStringLiteral("minValue")), point.dataType).value;
     point.maximumValue = valueFromJson(object.value(QStringLiteral("maxValue")), point.dataType).value;
     point.currentValue = valueFromJson(object.value(QStringLiteral("currentValue")), point.dataType).value;
-    point.enabled = object.value(QStringLiteral("enabled")).toBool(true);
+    point.enabled = true; // 点位启用字段已废弃，加载后一律生效
     point.category = object.value(QStringLiteral("category")).toString();
     point.label = object.value(QStringLiteral("label")).toString();
     const QJsonObject strategy = object.value(QStringLiteral("strategy")).toObject();

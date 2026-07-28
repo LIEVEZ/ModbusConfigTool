@@ -1,4 +1,4 @@
-﻿#include "strategy_editor_widget.h"
+#include "strategy_editor_widget.h"
 
 #include <QCheckBox>
 #include <QComboBox>
