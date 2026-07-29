@@ -213,6 +213,127 @@ OperationResult RegisterService::addGroup(const RegisterGroup &group)
     return OperationResult::ok();
 }
 
+OperationResult RegisterService::copyGroup(const QString &groupId)
+{
+    ProjectDocument candidate = m_projectService->document();
+    const RegisterGroup *source = nullptr;
+    for (const RegisterGroup &group : candidate.groups)
+    {
+        if (group.id == groupId)
+        {
+            source = &group;
+            break;
+        }
+    }
+    if (!source)
+    {
+        return OperationResult::fail(QStringLiteral("missing_group"),
+                                     QStringLiteral("groupId"),
+                                     QStringLiteral("分组不存在"));
+    }
+
+    RegisterGroup copied = *source;
+    copied.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    copied.isDefault = false;
+    copied.canvasX = source->canvasX + 40;
+    copied.canvasY = source->canvasY + 40;
+
+    QString baseName = source->name.trimmed();
+    if (baseName.isEmpty())
+    {
+        baseName = QStringLiteral("分组");
+    }
+    auto nameExists = [&](const QString &name) {
+        for (const RegisterGroup &group : candidate.groups)
+        {
+            if (group.name == name)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!nameExists(baseName))
+    {
+        copied.name = baseName;
+    }
+    else
+    {
+        int suffix = 2;
+        QString candidateName = QStringLiteral("%1_%2").arg(baseName).arg(suffix);
+        while (nameExists(candidateName))
+        {
+            ++suffix;
+            candidateName = QStringLiteral("%1_%2").arg(baseName).arg(suffix);
+        }
+        copied.name = candidateName;
+    }
+
+    QList<RegisterPoint> copiedPoints;
+    for (const RegisterPoint &point : candidate.registers)
+    {
+        if (point.groupId != groupId)
+        {
+            continue;
+        }
+        if (point.slaveAddress >= 247)
+        {
+            return OperationResult::fail(
+                QStringLiteral("invalid_slave"),
+                QStringLiteral("slaveAddress"),
+                QStringLiteral("从站地址加 1 后超出 1～247 范围"),
+                QStringLiteral("分组「%1」存在从站地址 %2，无法再加 1")
+                    .arg(source->name)
+                    .arg(point.slaveAddress));
+        }
+
+        RegisterPoint copiedPoint = point;
+        copiedPoint.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        copiedPoint.groupId = copied.id;
+        copiedPoint.slaveAddress = quint8(point.slaveAddress + 1);
+        copiedPoints.append(copiedPoint);
+    }
+
+    candidate.groups.append(copied);
+    for (const RegisterPoint &point : copiedPoints)
+    {
+        candidate.registers.append(point);
+    }
+
+    OperationResult validation = ValidationService::validateProject(candidate);
+    QString extraMessage;
+    if (!validation.success
+        && validation.code == QStringLiteral("address_overlap")
+        && copied.enabled)
+    {
+        // 同端口启用分组按地址冲突时，保留绑定数据，将复制分组设为停用后重试。
+        candidate.groups.last().enabled = false;
+        copied.enabled = false;
+        validation = ValidationService::validateProject(candidate);
+        if (validation.success)
+        {
+            extraMessage = QStringLiteral("因同端口地址冲突，新分组已停用");
+        }
+    }
+    if (!validation.success)
+    {
+        return validation;
+    }
+
+    m_projectService->editableDocument() = candidate;
+    m_projectService->markDirty();
+
+    OperationResult result = OperationResult::ok();
+    result.message = QStringLiteral("已复制分组「%1」").arg(copied.name);
+    if (!extraMessage.isEmpty())
+    {
+        result.message = QStringLiteral("%1（%2）").arg(result.message, extraMessage);
+    }
+    result.detail = QStringLiteral("共 %1 条寄存器，从站地址默认 +1")
+                        .arg(copiedPoints.size());
+    return result;
+}
+
 OperationResult RegisterService::updateGroup(const RegisterGroup &group)
 {
     ProjectDocument candidate = m_projectService->document();

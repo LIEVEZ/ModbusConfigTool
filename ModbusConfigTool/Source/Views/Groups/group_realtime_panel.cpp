@@ -72,6 +72,14 @@ QString strategyDisplayText(const StrategySpec &strategy)
     }
     return typeText;
 }
+
+QString valueCellToolTip(const RegisterPoint &point, const QString &display)
+{
+    return QStringLiteral("实时值：%1\n协议键：%2\n类型：%3\n双击编辑后回车写入")
+        .arg(display.isEmpty() ? QStringLiteral("（空）") : display,
+             point.protocolKey.isEmpty() ? QStringLiteral("（空）") : point.protocolKey,
+             dataTypeToString(point.dataType));
+}
 }
 
 GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
@@ -80,7 +88,7 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     : QDialog(parent), m_groupId(groupId)
 {
     setObjectName(QStringLiteral("groupRealtimePanel"));
-    resize(980, 520);
+    resize(1180, 560);
 
     const RegisterGroup *group = nullptr;
     for (const RegisterGroup &candidate : doc.groups)
@@ -151,7 +159,7 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     randomButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     randomButton->setFixedHeight(32);
     randomButton->setCursor(Qt::PointingHandCursor);
-    randomButton->setToolTip(QStringLiteral("在点位 min/max 范围内生成随机实时值"));
+    randomButton->setToolTip(QStringLiteral("在 ±10000 内生成随机实时值（浮点保留两位小数）"));
 
     auto *randomMenu = new QMenu(randomButton);
     QAction *randomAllAction = randomMenu->addAction(QStringLiteral("随机全部点位"));
@@ -193,24 +201,27 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
         QStringLiteral("策略"),
         QStringLiteral("实时值")
     });
-    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
+    m_table->horizontalHeader()->setSectionResizeMode(9, QHeaderView::Interactive);
     m_table->setColumnWidth(0, 55);
     m_table->setColumnWidth(1, 70);
     m_table->setColumnWidth(2, 50);
     m_table->setColumnWidth(4, 75);
     m_table->setColumnWidth(5, 65);
+    m_table->setColumnWidth(6, 130);
     m_table->setColumnWidth(7, 90);
     m_table->setColumnWidth(8, 80);
-    m_table->setColumnWidth(9, 110);
+    m_table->setColumnWidth(9, 220);
     m_table->verticalHeader()->setVisible(false);
+    m_table->setTextElideMode(Qt::ElideRight);
     m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setAlternatingRowColors(true);
     m_table->setShowGrid(false);
-    m_table->setToolTip(QStringLiteral("双击协议键可复制；双击其他列打开配置；双击实时值可改数值"));
+    m_table->setToolTip(QStringLiteral("双击协议键可复制；双击其他列打开配置；双击实时值可改数值；悬停实时值可看完整数值"));
 
     auto *buttons = new QDialogButtonBox(this);
     auto *configBtn = new QPushButton(QStringLiteral("寄存器配置"), this);
@@ -479,6 +490,9 @@ RegisterValue GroupRealtimePanel::resetValueInRange(const RegisterPoint &point)
 
 RegisterValue GroupRealtimePanel::randomValueInRange(const RegisterPoint &point)
 {
+    // 随机值统一限制在 ±10000，避免按数据类型全范围生成过大数值。
+    constexpr qint64 kRandomAbsLimit = 10000;
+
     RegisterValue minimum = point.minimumValue;
     RegisterValue maximum = point.maximumValue;
     if (minimum.dataType() != point.dataType)
@@ -500,11 +514,21 @@ RegisterValue GroupRealtimePanel::randomValueInRange(const RegisterPoint &point)
         {
             std::swap(low, high);
         }
+        low = qMax(low, -static_cast<double>(kRandomAbsLimit));
+        high = qMin(high, static_cast<double>(kRandomAbsLimit));
+        if (high < low)
+        {
+            low = -static_cast<double>(kRandomAbsLimit);
+            high = static_cast<double>(kRandomAbsLimit);
+        }
         if (qFuzzyCompare(low, high))
         {
-            return RegisterValue::fromFloating(low, point.dataType);
+            const double fixed = std::round(low * 100.0) / 100.0;
+            return RegisterValue::fromFloating(fixed, point.dataType);
         }
-        const double value = low + (high - low) * rng->generateDouble();
+        const double raw = low + (high - low) * rng->generateDouble();
+        // 浮点随机值固定保留两位小数。
+        const double value = std::round(raw * 100.0) / 100.0;
         return RegisterValue::fromFloating(value, point.dataType);
     }
 
@@ -516,22 +540,34 @@ RegisterValue GroupRealtimePanel::randomValueInRange(const RegisterPoint &point)
         {
             std::swap(low, high);
         }
+        low = qMax(low, -kRandomAbsLimit);
+        high = qMin(high, kRandomAbsLimit);
+        if (high < low)
+        {
+            low = -kRandomAbsLimit;
+            high = kRandomAbsLimit;
+        }
         if (low == high)
         {
             return RegisterValue::fromSigned64(low, point.dataType);
         }
-        // Use unsigned span to avoid overflow when high == qint64 max.
-        const quint64 span = static_cast<quint64>(high) - static_cast<quint64>(low);
+        const quint64 span = static_cast<quint64>(high - low);
         const quint64 offset = rng->generate64() % (span + 1ULL);
         return RegisterValue::fromSigned64(low + static_cast<qint64>(offset), point.dataType);
     }
 
-    // unsigned
+    // unsigned：正数范围同样限制在 10000 以内
     quint64 low = minimum.toUnsigned64();
     quint64 high = maximum.toUnsigned64();
     if (high < low)
     {
         std::swap(low, high);
+    }
+    high = qMin(high, static_cast<quint64>(kRandomAbsLimit));
+    if (low > high)
+    {
+        low = 0ULL;
+        high = static_cast<quint64>(kRandomAbsLimit);
     }
     if (low == high)
     {
@@ -593,6 +629,7 @@ bool GroupRealtimePanel::tryUpdateValueCells()
             valueItem->setText(display);
             valueItem->setData(Qt::UserRole + 2, display);
         }
+        valueItem->setToolTip(valueCellToolTip(*point, display));
 
         if (QTableWidgetItem *strategyItem = m_table->item(row, 8))
         {
@@ -671,17 +708,21 @@ void GroupRealtimePanel::rebuildTable()
         m_table->setItem(row, 7, labelItem);
         m_table->setItem(row, 8, strategyItem);
 
-        auto *valueItem = new QTableWidgetItem(point.currentValue.toDisplayString(point.precision));
+        const QString display = point.currentValue.toDisplayString(point.precision);
+        auto *valueItem = new QTableWidgetItem(display);
         valueItem->setFlags(valueItem->flags() | Qt::ItemIsEditable);
+        valueItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         valueItem->setData(Qt::UserRole, point.id);
         valueItem->setData(Qt::UserRole + 1, point.protocolKey);
-        valueItem->setData(Qt::UserRole + 2, point.currentValue.toDisplayString(point.precision));
-        valueItem->setToolTip(QStringLiteral("协议键：%1\n类型：%2\n双击编辑后回车写入")
-                                  .arg(point.protocolKey.isEmpty() ? QStringLiteral("（空）") : point.protocolKey)
-                                  .arg(dataTypeToString(point.dataType)));
+        valueItem->setData(Qt::UserRole + 2, display);
+        valueItem->setToolTip(valueCellToolTip(point, display));
         m_table->setItem(row, kValueColumn, valueItem);
         ++visible;
     }
+
+    m_table->resizeColumnToContents(kValueColumn);
+    const int valueWidth = m_table->columnWidth(kValueColumn);
+    m_table->setColumnWidth(kValueColumn, qBound(180, valueWidth + 12, 360));
 
     if (m_countBadge)
     {
@@ -771,6 +812,7 @@ void GroupRealtimePanel::onItemChanged(QTableWidgetItem *item)
     m_updatingTable = true;
     item->setText(display);
     item->setData(Qt::UserRole + 2, display);
+    item->setToolTip(valueCellToolTip(*point, display));
     m_updatingTable = false;
 
     for (RegisterPoint &localPoint : m_document.registers)

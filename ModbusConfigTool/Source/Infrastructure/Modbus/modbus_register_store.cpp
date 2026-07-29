@@ -1,9 +1,11 @@
-#include "modbus_register_store.h"
+﻿#include "modbus_register_store.h"
 
 #include "Domain/Values/value_converter.h"
 
 #include <QModbusExceptionResponse>
 #include <QtAlgorithms>
+
+#include <algorithm>
 
 namespace
 {
@@ -23,10 +25,18 @@ QModbusExceptionResponse illegalValue(QModbusPdu::FunctionCode functionCode)
 }
 }
 
+quint8 ModbusRegisterStore::normalizedSlave(quint8 slaveAddress)
+{
+    if (slaveAddress < 1 || slaveAddress > 247)
+    {
+        return 1;
+    }
+    return slaveAddress;
+}
+
 void ModbusRegisterStore::clear()
 {
-    m_holding.clear();
-    m_input.clear();
+    m_slaves.clear();
 }
 
 QVector<ModbusRegisterStore::Block> ModbusRegisterStore::mergeRanges(QVector<QPair<int, int>> ranges)
@@ -37,8 +47,6 @@ QVector<ModbusRegisterStore::Block> ModbusRegisterStore::mergeRanges(QVector<QPa
         return blocks;
     }
 
-    // Small holes (<= kMaxGapFill addresses) are absorbed into one block and stay 0.
-    // Large gaps remain separate sparse blocks to avoid huge allocations.
     constexpr int kMaxGapFill = 16;
 
     std::sort(ranges.begin(), ranges.end(), [](const QPair<int, int> &left, const QPair<int, int> &right) {
@@ -51,8 +59,6 @@ QVector<ModbusRegisterStore::Block> ModbusRegisterStore::mergeRanges(QVector<QPa
     {
         const int start = ranges.at(index).first;
         const int end = ranges.at(index).second;
-        // holeCount = start - currentEnd - 1; merge when holeCount <= kMaxGapFill
-        // (also covers overlap / adjacent: holeCount <= 0).
         if (start <= currentEnd + 1 + kMaxGapFill)
         {
             currentEnd = qMax(currentEnd, end);
@@ -76,73 +82,113 @@ QVector<ModbusRegisterStore::Block> ModbusRegisterStore::mergeRanges(QVector<QPa
 
 void ModbusRegisterStore::build(const QList<RegisterPoint> &points, StorageType storageType)
 {
-    QVector<QPair<int, int>> ranges;
+    QHash<quint8, QVector<QPair<int, int>>> rangesBySlave;
+    QHash<quint8, QList<RegisterPoint>> pointsBySlave;
+
     for (const RegisterPoint &point : points)
     {
         if (point.storageType != storageType)
         {
             continue;
         }
+        const quint8 slave = normalizedSlave(point.slaveAddress);
         const int count = qMax(1, int(point.registerCount));
-        ranges.append(qMakePair(int(point.address), int(point.address) + count - 1));
+        rangesBySlave[slave].append(qMakePair(int(point.address), int(point.address) + count - 1));
+        pointsBySlave[slave].append(point);
     }
 
-    QVector<Block> blocks = mergeRanges(ranges);
-    if (storageType == StorageType::Holding)
+    for (auto it = rangesBySlave.constBegin(); it != rangesBySlave.constEnd(); ++it)
     {
-        m_holding = blocks;
-    }
-    else
-    {
-        m_input = blocks;
-    }
-
-    for (const RegisterPoint &point : points)
-    {
-        if (point.storageType != storageType)
+        const quint8 slave = it.key();
+        SlaveTables &tables = m_slaves[slave];
+        QVector<Block> blocks = mergeRanges(it.value());
+        if (storageType == StorageType::Holding)
         {
-            continue;
+            tables.holding = blocks;
         }
-
-        RegisterValue value = point.currentValue;
-        if (value.dataType() != point.dataType)
+        else
         {
-            value = RegisterValue::fromUnsigned64(value.toUnsigned64(), point.dataType);
+            tables.input = blocks;
         }
-        const ConversionResult encoded = ValueConverter::toRegisters(value, point.endian);
-        const QModbusDataUnit::RegisterType table = storageType == StorageType::Holding
-            ? QModbusDataUnit::HoldingRegisters
-            : QModbusDataUnit::InputRegisters;
-        for (int index = 0; index < encoded.registers.size(); ++index)
+    }
+
+    for (auto it = pointsBySlave.constBegin(); it != pointsBySlave.constEnd(); ++it)
+    {
+        const quint8 slave = it.key();
+        for (const RegisterPoint &point : it.value())
         {
-            writeOne(table, int(point.address) + index, encoded.registers.at(index));
+            RegisterValue value = point.currentValue;
+            if (value.dataType() != point.dataType)
+            {
+                value = RegisterValue::fromUnsigned64(value.toUnsigned64(), point.dataType);
+            }
+            const ConversionResult encoded = ValueConverter::toRegisters(value, point.endian);
+            const QModbusDataUnit::RegisterType table = storageType == StorageType::Holding
+                ? QModbusDataUnit::HoldingRegisters
+                : QModbusDataUnit::InputRegisters;
+            for (int index = 0; index < encoded.registers.size(); ++index)
+            {
+                writeOne(slave, table, int(point.address) + index, encoded.registers.at(index));
+            }
         }
     }
 }
 
-QVector<ModbusRegisterStore::Block> *ModbusRegisterStore::tableBlocks(QModbusDataUnit::RegisterType table)
+QList<quint8> ModbusRegisterStore::slaveAddresses() const
 {
+    QList<quint8> addresses = m_slaves.keys();
+    std::sort(addresses.begin(), addresses.end());
+    return addresses;
+}
+
+bool ModbusRegisterStore::isEmpty() const
+{
+    for (auto it = m_slaves.constBegin(); it != m_slaves.constEnd(); ++it)
+    {
+        if (!it.value().holding.isEmpty() || !it.value().input.isEmpty())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+QVector<ModbusRegisterStore::Block> *ModbusRegisterStore::tableBlocks(
+    quint8 slaveAddress, QModbusDataUnit::RegisterType table)
+{
+    const quint8 slave = normalizedSlave(slaveAddress);
+    auto it = m_slaves.find(slave);
+    if (it == m_slaves.end())
+    {
+        return nullptr;
+    }
     if (table == QModbusDataUnit::HoldingRegisters)
     {
-        return &m_holding;
+        return &it.value().holding;
     }
     if (table == QModbusDataUnit::InputRegisters)
     {
-        return &m_input;
+        return &it.value().input;
     }
     return nullptr;
 }
 
 const QVector<ModbusRegisterStore::Block> *ModbusRegisterStore::tableBlocks(
-    QModbusDataUnit::RegisterType table) const
+    quint8 slaveAddress, QModbusDataUnit::RegisterType table) const
 {
+    const quint8 slave = normalizedSlave(slaveAddress);
+    auto it = m_slaves.constFind(slave);
+    if (it == m_slaves.constEnd())
+    {
+        return nullptr;
+    }
     if (table == QModbusDataUnit::HoldingRegisters)
     {
-        return &m_holding;
+        return &it.value().holding;
     }
     if (table == QModbusDataUnit::InputRegisters)
     {
-        return &m_input;
+        return &it.value().input;
     }
     return nullptr;
 }
@@ -172,42 +218,66 @@ const ModbusRegisterStore::Block *ModbusRegisterStore::findBlock(const QVector<B
     return nullptr;
 }
 
-bool ModbusRegisterStore::isEmpty() const
-{
-    return m_holding.isEmpty() && m_input.isEmpty();
-}
-
 int ModbusRegisterStore::blockCount(QModbusDataUnit::RegisterType table) const
 {
-    const QVector<Block> *blocks = tableBlocks(table);
-    return blocks ? blocks->size() : 0;
+    int count = 0;
+    for (auto it = m_slaves.constBegin(); it != m_slaves.constEnd(); ++it)
+    {
+        if (table == QModbusDataUnit::HoldingRegisters)
+        {
+            count += it.value().holding.size();
+        }
+        else if (table == QModbusDataUnit::InputRegisters)
+        {
+            count += it.value().input.size();
+        }
+    }
+    return count;
 }
 
 QString ModbusRegisterStore::summary(QModbusDataUnit::RegisterType table) const
 {
-    const QVector<Block> *blocks = tableBlocks(table);
-    if (!blocks || blocks->isEmpty())
-    {
-        return QStringLiteral("无");
-    }
-
     QStringList parts;
-    const int limit = qMin(8, blocks->size());
-    for (int index = 0; index < limit; ++index)
+    constexpr int limit = 6;
+    int emitted = 0;
+    for (quint8 slave : slaveAddresses())
     {
-        const Block &block = blocks->at(index);
-        parts.append(QStringLiteral("[%1-%2]").arg(block.start).arg(block.end()));
+        const QVector<Block> *blocks = tableBlocks(slave, table);
+        if (!blocks)
+        {
+            continue;
+        }
+        for (const Block &block : *blocks)
+        {
+            if (emitted >= limit)
+            {
+                break;
+            }
+            parts.append(QStringLiteral("S%1[%2-%3]")
+                             .arg(slave)
+                             .arg(block.start)
+                             .arg(block.end()));
+            ++emitted;
+        }
+        if (emitted >= limit)
+        {
+            break;
+        }
     }
-    if (blocks->size() > limit)
+    const int total = blockCount(table);
+    if (total > limit)
     {
-        parts.append(QStringLiteral("...共%1块").arg(blocks->size()));
+        parts.append(QStringLiteral("...共%1块").arg(total));
     }
     return parts.join(QStringLiteral(", "));
 }
 
-bool ModbusRegisterStore::readOne(QModbusDataUnit::RegisterType table, int address, quint16 *value) const
+bool ModbusRegisterStore::readOne(quint8 slaveAddress,
+                                  QModbusDataUnit::RegisterType table,
+                                  int address,
+                                  quint16 *value) const
 {
-    const QVector<Block> *blocks = tableBlocks(table);
+    const QVector<Block> *blocks = tableBlocks(slaveAddress, table);
     if (!blocks || !value)
     {
         return false;
@@ -221,9 +291,12 @@ bool ModbusRegisterStore::readOne(QModbusDataUnit::RegisterType table, int addre
     return true;
 }
 
-bool ModbusRegisterStore::writeOne(QModbusDataUnit::RegisterType table, int address, quint16 value)
+bool ModbusRegisterStore::writeOne(quint8 slaveAddress,
+                                   QModbusDataUnit::RegisterType table,
+                                   int address,
+                                   quint16 value)
 {
-    QVector<Block> *blocks = tableBlocks(table);
+    QVector<Block> *blocks = tableBlocks(slaveAddress, table);
     if (!blocks)
     {
         return false;
@@ -237,7 +310,8 @@ bool ModbusRegisterStore::writeOne(QModbusDataUnit::RegisterType table, int addr
     return true;
 }
 
-bool ModbusRegisterStore::read(QModbusDataUnit::RegisterType table,
+bool ModbusRegisterStore::read(quint8 slaveAddress,
+                               QModbusDataUnit::RegisterType table,
                                int address,
                                int count,
                                QVector<quint16> *out) const
@@ -249,7 +323,7 @@ bool ModbusRegisterStore::read(QModbusDataUnit::RegisterType table,
     out->resize(count);
     for (int index = 0; index < count; ++index)
     {
-        if (!readOne(table, address + index, &(*out)[index]))
+        if (!readOne(slaveAddress, table, address + index, &(*out)[index]))
         {
             out->clear();
             return false;
@@ -258,7 +332,8 @@ bool ModbusRegisterStore::read(QModbusDataUnit::RegisterType table,
     return true;
 }
 
-bool ModbusRegisterStore::write(QModbusDataUnit::RegisterType table,
+bool ModbusRegisterStore::write(quint8 slaveAddress,
+                                QModbusDataUnit::RegisterType table,
                                 int address,
                                 const QVector<quint16> &values)
 {
@@ -269,14 +344,14 @@ bool ModbusRegisterStore::write(QModbusDataUnit::RegisterType table,
     for (int index = 0; index < values.size(); ++index)
     {
         quint16 ignored = 0;
-        if (!readOne(table, address + index, &ignored))
+        if (!readOne(slaveAddress, table, address + index, &ignored))
         {
             return false;
         }
     }
     for (int index = 0; index < values.size(); ++index)
     {
-        if (!writeOne(table, address + index, values.at(index)))
+        if (!writeOne(slaveAddress, table, address + index, values.at(index)))
         {
             return false;
         }
@@ -284,8 +359,15 @@ bool ModbusRegisterStore::write(QModbusDataUnit::RegisterType table,
     return true;
 }
 
-QModbusResponse ModbusRegisterStore::processRequest(const QModbusPdu &request)
+QModbusResponse ModbusRegisterStore::processRequest(quint8 slaveAddress, const QModbusPdu &request)
 {
+    const quint8 slave = normalizedSlave(slaveAddress);
+    if (!m_slaves.contains(slave))
+    {
+        // 该从站未映射：返回无效响应，由传输层保持静默（RTU 标准行为）
+        return QModbusResponse();
+    }
+
     const QModbusPdu::FunctionCode functionCode = request.functionCode();
     switch (functionCode)
     {
@@ -307,7 +389,7 @@ QModbusResponse ModbusRegisterStore::processRequest(const QModbusPdu &request)
             ? QModbusDataUnit::HoldingRegisters
             : QModbusDataUnit::InputRegisters;
         QVector<quint16> values;
-        if (!read(table, int(address), int(count), &values))
+        if (!read(slave, table, int(address), int(count), &values))
         {
             return illegalAddress(functionCode);
         }
@@ -322,7 +404,7 @@ QModbusResponse ModbusRegisterStore::processRequest(const QModbusPdu &request)
         quint16 address = 0;
         quint16 value = 0;
         request.decodeData(&address, &value);
-        if (!writeOne(QModbusDataUnit::HoldingRegisters, int(address), value))
+        if (!writeOne(slave, QModbusDataUnit::HoldingRegisters, int(address), value))
         {
             return illegalAddress(functionCode);
         }
@@ -352,7 +434,7 @@ QModbusResponse ModbusRegisterStore::processRequest(const QModbusPdu &request)
         {
             values[index] = quint16((quint8(payload.at(index * 2)) << 8) | quint8(payload.at(index * 2 + 1)));
         }
-        if (!write(QModbusDataUnit::HoldingRegisters, int(address), values))
+        if (!write(slave, QModbusDataUnit::HoldingRegisters, int(address), values))
         {
             return illegalAddress(functionCode);
         }
@@ -361,4 +443,4 @@ QModbusResponse ModbusRegisterStore::processRequest(const QModbusPdu &request)
     default:
         return illegalFunction(functionCode);
     }
-}
+}

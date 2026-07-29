@@ -65,10 +65,6 @@ void MainWindow::buildToolBar()
     m_workspaceToolBar->setMovable(false);
     m_workspaceToolBar->setFloatable(false);
 
-    auto *title = new QLabel(QStringLiteral("分组画布"), m_workspaceToolBar);
-    title->setObjectName(QStringLiteral("workspaceTitle"));
-    m_workspaceToolBar->addWidget(title);
-
     QAction *addGroupAction = m_workspaceToolBar->addAction(QStringLiteral("＋ 新增分组"));
     addGroupAction->setObjectName(QStringLiteral("addGroupToolAction"));
     if (auto *addGroupButton = qobject_cast<QToolButton *>(
@@ -337,6 +333,7 @@ void MainWindow::connectActions()
         menu.addAction(QStringLiteral("导出 CSV"), this, [this, groupId]() { exportGroupCsv(groupId); });
         menu.addSeparator();
         menu.addAction(QStringLiteral("编辑分组"), this, [this, groupId]() { editGroup(groupId); });
+        menu.addAction(QStringLiteral("复制分组"), this, [this, groupId]() { copyGroup(groupId); });
         menu.addAction(QStringLiteral("修改从站地址"), this, [this, groupId]() { editGroupSlaveAddress(groupId); });
         menu.addAction(QStringLiteral("删除分组"), this, [this, groupId]() { removeGroup(groupId); });
         menu.exec(globalPos);
@@ -922,6 +919,11 @@ void MainWindow::editGroupSlaveAddress(const QString &groupId)
 
     showResult(m_viewModel->setGroupSlaveAddress(groupId, quint8(slave)),
                QStringLiteral("已将分组「%1」从站地址批量改为 %2").arg(groupName).arg(slave));
+}
+
+void MainWindow::copyGroup(const QString &groupId)
+{
+    showResult(m_viewModel->copyGroup(groupId), QStringLiteral("分组已复制"));
 }
 
 void MainWindow::removeGroup(const QString &groupId)

@@ -75,6 +75,12 @@ void MainWindowViewModel::stopAllPorts() { m_runtimeService->stopAll(); }
 
 // 分组
 OperationResult MainWindowViewModel::addGroup(const RegisterGroup &group) { return m_registerService->addGroup(group); }
+OperationResult MainWindowViewModel::copyGroup(const QString &groupId)
+{
+    const OperationResult result = m_registerService->copyGroup(groupId);
+    if (result.success) { syncRuntimeMaps(); }
+    return result;
+}
 OperationResult MainWindowViewModel::updateGroup(const RegisterGroup &group) { return m_registerService->updateGroup(group); }
 OperationResult MainWindowViewModel::setGroupEnabled(const QString &groupId, bool enabled)
 {

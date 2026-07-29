@@ -7,7 +7,10 @@
 #include <QSerialPortInfo>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 ConnectionConfigDialog::ConnectionConfigDialog(const ConnectionPort &port, QWidget *parent)
     : QDialog(parent)
@@ -45,12 +48,37 @@ ConnectionConfigDialog::ConnectionConfigDialog(const ConnectionPort &port, QWidg
     auto *rtuPage = new QWidget(this);
     auto *rtuForm = new QFormLayout(rtuPage);
     m_serialPort = new QComboBox(rtuPage);
+    QStringList portNames;
     for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts())
     {
-        m_serialPort->addItem(info.portName());
+        portNames.append(info.portName());
     }
+    std::sort(portNames.begin(), portNames.end(), [](const QString &left, const QString &right) {
+        auto comNumber = [](const QString &name) {
+            QString digits;
+            for (const QChar &ch : name)
+            {
+                if (ch.isDigit())
+                {
+                    digits.append(ch);
+                }
+            }
+            bool ok = false;
+            const int value = digits.toInt(&ok);
+            return ok ? value : -1;
+        };
+        const int leftNumber = comNumber(left);
+        const int rightNumber = comNumber(right);
+        if (leftNumber != rightNumber)
+        {
+            return leftNumber < rightNumber;
+        }
+        return left < right;
+    });
+    m_serialPort->addItems(portNames);
     m_baudRate = new QComboBox(rtuPage);
     m_baudRate->addItems({
+        QStringLiteral("1200"), QStringLiteral("2400"), QStringLiteral("4800"),
         QStringLiteral("9600"), QStringLiteral("19200"), QStringLiteral("38400"),
         QStringLiteral("57600"), QStringLiteral("115200")
     });

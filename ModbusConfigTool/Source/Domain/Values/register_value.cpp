@@ -100,7 +100,9 @@ QString RegisterValue::toDisplayString(int precision) const
 {
     if (m_type == DataType::Float32 || m_type == DataType::Float64)
     {
-        return QString::number(toDouble(), 'f', precision);
+        // 浮点用 g 格式，避免超大/超小数被 f+低精度裁成难读长整数，并尽量完整展示有效数字。
+        const int digits = precision <= 0 ? 8 : qBound(1, precision, 15);
+        return QString::number(toDouble(), 'g', digits);
     }
     return toStorageString();
 }

@@ -1,4 +1,4 @@
-#ifndef MODBUS_RUNTIME_WORKER_H
+﻿#ifndef MODBUS_RUNTIME_WORKER_H
 #define MODBUS_RUNTIME_WORKER_H
 
 #include "Domain/Models/comm_frame.h"
@@ -8,7 +8,7 @@
 #include <QModbusDataUnit>
 #include <QObject>
 
-class QModbusServer;
+class MultiSlaveModbusServer;
 class StrategyEngine;
 
 class ModbusRuntimeWorker : public QObject
@@ -33,10 +33,10 @@ signals:
     void frameCaptured(const CommFrame &frame);
 
 private:
-    void handleDataWritten(QModbusDataUnit::RegisterType table, int address, int size);
+    void handleDataWritten(quint8 slaveAddress, QModbusDataUnit::RegisterType table, int address, int size);
     void rebuildMap(const QList<RegisterPoint> &points, bool restartStrategy);
 
-    QModbusServer *m_server = nullptr;
+    MultiSlaveModbusServer *m_server = nullptr;
     StrategyEngine *m_strategyEngine = nullptr;
     ServerProfile m_profile;
     QHash<QString, RegisterPoint> m_points;

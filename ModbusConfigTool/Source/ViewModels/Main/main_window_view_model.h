@@ -50,6 +50,7 @@ public:
 
     // 分组（完整结构）
     OperationResult addGroup(const RegisterGroup &group);
+    OperationResult copyGroup(const QString &groupId);
     OperationResult updateGroup(const RegisterGroup &group);
     OperationResult setGroupEnabled(const QString &groupId, bool enabled);
     OperationResult setGroupPort(const QString &groupId, const QString &portId);

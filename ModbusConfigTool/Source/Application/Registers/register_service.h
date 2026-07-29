@@ -12,6 +12,7 @@ public:
 
     OperationResult addGroup(const QString &name);
     OperationResult addGroup(const RegisterGroup &group);
+    OperationResult copyGroup(const QString &groupId);
     OperationResult updateGroup(const RegisterGroup &group);
     OperationResult setGroupEnabled(const QString &groupId, bool enabled);
     OperationResult setGroupPort(const QString &groupId, const QString &portId);

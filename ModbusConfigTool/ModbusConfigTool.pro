@@ -1,4 +1,4 @@
-QT += core gui widgets serialbus serialport
+QT += core gui widgets network serialbus serialport
 
 CONFIG += c++17 warn_on
 TEMPLATE = app

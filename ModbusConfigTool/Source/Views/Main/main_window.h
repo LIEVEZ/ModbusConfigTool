@@ -57,6 +57,7 @@ private:
     void showGroupConfig(const QString &groupId);
     void editGroup(const QString &groupId);
     void editGroupSlaveAddress(const QString &groupId);
+    void copyGroup(const QString &groupId);
     void removeGroup(const QString &groupId);
     void importGroupCsv(const QString &groupId);
     void exportGroupCsv(const QString &groupId);

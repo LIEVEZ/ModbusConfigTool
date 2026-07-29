@@ -1,146 +1,18 @@
-#include "modbus_runtime_worker.h"
+﻿#include "modbus_runtime_worker.h"
 
 #include "Domain/Values/value_converter.h"
+#include "Infrastructure/Modbus/multi_slave_modbus_server.h"
 #include "Infrastructure/Strategy/strategy_engine.h"
 
-#include <QModbusDataUnitMap>
-#include <QModbusRtuSerialSlave>
-#include <QModbusTcpServer>
-#include <QSerialPort>
+#include <QHash>
+#include <QStringList>
 
-#include <functional>
+#include <algorithm>
 
-namespace
+ModbusRuntimeWorker::ModbusRuntimeWorker(QObject *parent)
+    : QObject(parent)
 {
-using FrameHandler = std::function<void(const CommFrame &)>;
-
-
-quint8 serverAddressFromPoints(const QList<RegisterPoint> &points)
-{
-    // 端口不绑定从站：运行时从点位推导，供 QModbusServer 过滤请求
-    for (const RegisterPoint &point : points)
-    {
-        if (point.slaveAddress >= 1 && point.slaveAddress <= 247)
-        {
-            return point.slaveAddress;
-        }
-    }
-    return 1;
 }
-
-
-class BlockModbusTcpServer : public QModbusTcpServer
-{
-public:
-    explicit BlockModbusTcpServer(ModbusRegisterStore *store,
-                                  FrameHandler frameHandler,
-                                  QObject *parent = nullptr)
-        : QModbusTcpServer(parent), m_store(store), m_frameHandler(std::move(frameHandler))
-    {
-    }
-
-protected:
-    QModbusResponse processRequest(const QModbusPdu &request) override
-    {
-        const CommFrame rx = CommFrameFactory::fromRequest(request);
-        if (m_frameHandler)
-        {
-            m_frameHandler(rx);
-        }
-
-        const QModbusPdu::FunctionCode functionCode = request.functionCode();
-        const QModbusResponse response = m_store->processRequest(request);
-
-        if (m_frameHandler)
-        {
-            m_frameHandler(CommFrameFactory::fromResponse(response, rx));
-        }
-
-        if (!response.isException())
-        {
-            if (functionCode == QModbusPdu::WriteSingleRegister)
-            {
-                quint16 address = 0;
-                quint16 value = 0;
-                request.decodeData(&address, &value);
-                Q_UNUSED(value);
-                emit dataWritten(QModbusDataUnit::HoldingRegisters, int(address), 1);
-            }
-            else if (functionCode == QModbusPdu::WriteMultipleRegisters)
-            {
-                quint16 address = 0;
-                quint16 count = 0;
-                quint8 byteCount = 0;
-                request.decodeData(&address, &count, &byteCount);
-                Q_UNUSED(byteCount);
-                emit dataWritten(QModbusDataUnit::HoldingRegisters, int(address), int(count));
-            }
-        }
-        return response;
-    }
-
-private:
-    ModbusRegisterStore *m_store = nullptr;
-    FrameHandler m_frameHandler;
-};
-
-class BlockModbusRtuSlave : public QModbusRtuSerialSlave
-{
-public:
-    explicit BlockModbusRtuSlave(ModbusRegisterStore *store,
-                                 FrameHandler frameHandler,
-                                 QObject *parent = nullptr)
-        : QModbusRtuSerialSlave(parent), m_store(store), m_frameHandler(std::move(frameHandler))
-    {
-    }
-
-protected:
-    QModbusResponse processRequest(const QModbusPdu &request) override
-    {
-        const CommFrame rx = CommFrameFactory::fromRequest(request);
-        if (m_frameHandler)
-        {
-            m_frameHandler(rx);
-        }
-
-        const QModbusPdu::FunctionCode functionCode = request.functionCode();
-        const QModbusResponse response = m_store->processRequest(request);
-
-        if (m_frameHandler)
-        {
-            m_frameHandler(CommFrameFactory::fromResponse(response, rx));
-        }
-
-        if (!response.isException())
-        {
-            if (functionCode == QModbusPdu::WriteSingleRegister)
-            {
-                quint16 address = 0;
-                quint16 value = 0;
-                request.decodeData(&address, &value);
-                Q_UNUSED(value);
-                emit dataWritten(QModbusDataUnit::HoldingRegisters, int(address), 1);
-            }
-            else if (functionCode == QModbusPdu::WriteMultipleRegisters)
-            {
-                quint16 address = 0;
-                quint16 count = 0;
-                quint8 byteCount = 0;
-                request.decodeData(&address, &count, &byteCount);
-                Q_UNUSED(byteCount);
-                emit dataWritten(QModbusDataUnit::HoldingRegisters, int(address), int(count));
-            }
-        }
-        return response;
-    }
-
-private:
-    ModbusRegisterStore *m_store = nullptr;
-    FrameHandler m_frameHandler;
-};
-}
-
-ModbusRuntimeWorker::ModbusRuntimeWorker(QObject *parent) : QObject(parent) {}
 
 void ModbusRuntimeWorker::start(const ServerProfile &profile,
                                 const QList<RegisterPoint> &points)
@@ -148,14 +20,14 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
     stop();
     m_profile = profile;
 
-    FrameHandler frameHandler = [this](const CommFrame &frame) {
-        emit frameCaptured(frame);
-    };
-
-    m_server = profile.connectionType == ConnectionType::Tcp
-        ? static_cast<QModbusServer *>(new BlockModbusTcpServer(&m_store, frameHandler, this))
-        : static_cast<QModbusServer *>(new BlockModbusRtuSlave(&m_store, frameHandler, this));
-    m_server->setServerAddress(serverAddressFromPoints(points));
+    m_server = new MultiSlaveModbusServer(&m_store, this);
+    connect(m_server, &MultiSlaveModbusServer::frameCaptured,
+            this, &ModbusRuntimeWorker::frameCaptured);
+    connect(m_server, &MultiSlaveModbusServer::dataWritten,
+            this, &ModbusRuntimeWorker::handleDataWritten);
+    connect(m_server, &MultiSlaveModbusServer::errorOccurred, this, [this](const QString &message) {
+        emit failed(QStringLiteral("Modbus 运行时发生错误"), message);
+    });
 
     rebuildMap(points, false);
     if (m_points.isEmpty() || m_store.isEmpty())
@@ -167,32 +39,7 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
         return;
     }
 
-    if (profile.connectionType == ConnectionType::Tcp)
-    {
-        m_server->setConnectionParameter(QModbusDevice::NetworkAddressParameter, profile.tcpHost);
-        m_server->setConnectionParameter(QModbusDevice::NetworkPortParameter, profile.tcpPort);
-    }
-    else
-    {
-        m_server->setConnectionParameter(QModbusDevice::SerialPortNameParameter, profile.serialPort);
-        m_server->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, profile.baudRate);
-        m_server->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
-        m_server->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
-        const QSerialPort::Parity parity = profile.parity == QLatin1Char('E') ? QSerialPort::EvenParity
-            : profile.parity == QLatin1Char('O') ? QSerialPort::OddParity : QSerialPort::NoParity;
-        m_server->setConnectionParameter(QModbusDevice::SerialParityParameter, parity);
-    }
-
-    connect(m_server, &QModbusDevice::errorOccurred, this, [this](QModbusDevice::Error error)
-    {
-        if (error != QModbusDevice::NoError && m_server)
-        {
-            emit failed(QStringLiteral("Modbus 运行时发生错误"), m_server->errorString());
-        }
-    });
-    connect(m_server, &QModbusServer::dataWritten, this, &ModbusRuntimeWorker::handleDataWritten);
-
-    if (!m_server->connectDevice())
+    if (!m_server->start(profile))
     {
         emit failed(QStringLiteral("无法启动 Modbus 运行时"), m_server->errorString());
         stop();
@@ -220,7 +67,14 @@ void ModbusRuntimeWorker::reloadPoints(const QList<RegisterPoint> &points)
     }
 
     rebuildMap(points, true);
-    emit diagnostics(QStringLiteral("寄存器映射已热更新（连接保持）"));
+    const QList<quint8> slaves = m_store.slaveAddresses();
+    QStringList slaveText;
+    for (quint8 slave : slaves)
+    {
+        slaveText.append(QString::number(slave));
+    }
+    emit diagnostics(QStringLiteral("寄存器映射已热更新（连接保持），从站: %1")
+                         .arg(slaveText.isEmpty() ? QStringLiteral("-") : slaveText.join(QLatin1Char(','))));
 }
 
 void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool restartStrategy)
@@ -243,7 +97,6 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
         // 从站地址保留点位自身配置，不再由端口覆盖。
         RegisterPoint mapped = point;
         mapped.enabled = true;
-        mapped.registerCount = quint16(qMax(1, int(point.registerCount)));
         if (mapped.slaveAddress < 1 || mapped.slaveAddress > 247)
         {
             mapped.slaveAddress = 1;
@@ -255,40 +108,22 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
     m_store.build(enabledPoints, StorageType::Holding);
     m_store.build(enabledPoints, StorageType::Input);
 
+    const QList<quint8> slaves = m_store.slaveAddresses();
+    QStringList slaveText;
+    for (quint8 slave : slaves)
+    {
+        slaveText.append(QString::number(slave));
+    }
+
     emit diagnostics(QStringLiteral(
-        "收到点位 %1，映射 %2；Holding %3 块 %4；Input %5 块 %6")
+        "收到点位 %1，映射 %2；从站[%3]；Holding %4 块 %5；Input %6 块 %7")
         .arg(points.size())
         .arg(m_points.size())
+        .arg(slaveText.isEmpty() ? QStringLiteral("-") : slaveText.join(QLatin1Char(',')))
         .arg(m_store.blockCount(QModbusDataUnit::HoldingRegisters))
         .arg(m_store.summary(QModbusDataUnit::HoldingRegisters))
         .arg(m_store.blockCount(QModbusDataUnit::InputRegisters))
         .arg(m_store.summary(QModbusDataUnit::InputRegisters)));
-
-    if (m_server)
-    {
-        QModbusDataUnitMap map;
-        auto appendCover = [&](QModbusDataUnit::RegisterType table, StorageType storageType) {
-            int start = 65536;
-            int end = -1;
-            for (const RegisterPoint &point : enabledPoints)
-            {
-                if (point.storageType != storageType)
-                {
-                    continue;
-                }
-                start = qMin(start, int(point.address));
-                end = qMax(end, int(point.address) + int(point.registerCount) - 1);
-            }
-            if (end >= start)
-            {
-                map.insert(table, QModbusDataUnit(table, start, quint16(end - start + 1)));
-            }
-        };
-        appendCover(QModbusDataUnit::HoldingRegisters, StorageType::Holding);
-        appendCover(QModbusDataUnit::InputRegisters, StorageType::Input);
-        m_server->setMap(map);
-        m_server->setServerAddress(serverAddressFromPoints(enabledPoints));
-    }
 
     if (!restartStrategy || m_points.isEmpty())
     {
@@ -303,15 +138,15 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
 
 void ModbusRuntimeWorker::stop()
 {
+    if (m_strategyEngine)
+    {
+        m_strategyEngine->stop();
+        delete m_strategyEngine;
+        m_strategyEngine = nullptr;
+    }
     if (m_server)
     {
-        if (m_strategyEngine)
-        {
-            m_strategyEngine->stop();
-            delete m_strategyEngine;
-            m_strategyEngine = nullptr;
-        }
-        m_server->disconnectDevice();
+        m_server->stop();
         delete m_server;
         m_server = nullptr;
     }
@@ -320,10 +155,17 @@ void ModbusRuntimeWorker::stop()
     emit stopped();
 }
 
-void ModbusRuntimeWorker::handleDataWritten(QModbusDataUnit::RegisterType table, int address, int size)
+void ModbusRuntimeWorker::handleDataWritten(quint8 slaveAddress,
+                                            QModbusDataUnit::RegisterType table,
+                                            int address,
+                                            int size)
 {
     for (const RegisterPoint &point : m_points)
     {
+        if (point.slaveAddress != slaveAddress)
+        {
+            continue;
+        }
         const QModbusDataUnit::RegisterType pointTable = point.storageType == StorageType::Holding
             ? QModbusDataUnit::HoldingRegisters : QModbusDataUnit::InputRegisters;
         const int pointEnd = int(point.address) + point.registerCount - 1;
@@ -337,7 +179,7 @@ void ModbusRuntimeWorker::handleDataWritten(QModbusDataUnit::RegisterType table,
         for (int offset = 0; offset < point.registerCount; ++offset)
         {
             quint16 registerValue = 0;
-            if (!m_store.readOne(pointTable, int(point.address) + offset, &registerValue))
+            if (!m_store.readOne(point.slaveAddress, pointTable, int(point.address) + offset, &registerValue))
             {
                 registers.clear();
                 break;
@@ -377,10 +219,12 @@ void ModbusRuntimeWorker::writePoint(const QString &pointId,
         ? QModbusDataUnit::HoldingRegisters : QModbusDataUnit::InputRegisters;
     for (int index = 0; index < converted.registers.size(); ++index)
     {
-        if (!m_store.writeOne(table, int(point.address) + index, converted.registers.at(index)))
+        if (!m_store.writeOne(point.slaveAddress, table, int(point.address) + index, converted.registers.at(index)))
         {
             emit failed(QStringLiteral("写入寄存器失败"),
-                        QStringLiteral("地址 %1 未映射").arg(point.address + index));
+                        QStringLiteral("从站 %1 地址 %2 未映射")
+                            .arg(point.slaveAddress)
+                            .arg(point.address + index));
             return;
         }
     }

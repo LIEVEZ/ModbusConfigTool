@@ -212,8 +212,8 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                         .arg(other.address));
             }
 
-            // 跨组：仅当两边都启用，且绑定同一非空端口时才冲突
-            // 未绑定端口（portId 为空）不参与跨组冲突检查
+            // 跨组：两边都启用、绑定同一非空端口、且从站地址相同、寄存器地址重叠时才冲突
+            // 未绑定端口（portId 为空）不参与跨组冲突检查；从站不同视为独立设备映射
             if (!pointGroup || !otherGroup)
             {
                 continue;
@@ -227,6 +227,10 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                 continue;
             }
             if (pointGroup->portId != otherGroup->portId)
+            {
+                continue;
+            }
+            if (other.slaveAddress != point.slaveAddress)
             {
                 continue;
             }
@@ -245,8 +249,9 @@ OperationResult ValidationService::validateProject(const ProjectDocument &docume
                 QStringLiteral("address_overlap"),
                 QStringLiteral("address"),
                 QStringLiteral("同端口启用分组存在地址重叠"),
-                QStringLiteral("端口「%1」上，分组「%2」地址 %3 与分组「%4」地址 %5 重叠（均已启用）")
+                QStringLiteral("端口「%1」上，从站 %2，分组「%3」地址 %4 与分组「%5」地址 %6 重叠（均已启用）")
                     .arg(portName,
+                         QString::number(point.slaveAddress),
                          pointGroup->name,
                          QString::number(point.address),
                          otherGroup->name,
