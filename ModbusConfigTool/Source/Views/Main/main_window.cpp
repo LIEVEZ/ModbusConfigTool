@@ -150,13 +150,6 @@ void MainWindow::buildMenus()
     QAction *commMonitorAction = commMonitorMenu->addAction(QStringLiteral("打开通信监控"));
     commMonitorAction->setObjectName(QStringLiteral("commMonitorAction"));
     commMonitorAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+M")));
-    QMenu *connection = menuBar()->addMenu(QStringLiteral("连接配置"));
-    connection->setObjectName(QStringLiteral("connectionConfigMenu"));
-    QAction *addPortAction = connection->addAction(QStringLiteral("新增端口"));
-    addPortAction->setObjectName(QStringLiteral("addPortMenuAction"));
-    QAction *managePortsAction = connection->addAction(QStringLiteral("管理连接端口"));
-    managePortsAction->setObjectName(QStringLiteral("managePortsMenuAction"));
-
     QMenu *help = menuBar()->addMenu(QStringLiteral("帮助"));
     help->setObjectName(QStringLiteral("helpMenu"));
     QAction *aboutAction = help->addAction(QStringLiteral("关于"));
@@ -169,13 +162,6 @@ void MainWindow::buildMenus()
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
     connect(importGroupMenuAction, &QAction::triggered, this, &MainWindow::importGroup);
-    connect(addPortAction, &QAction::triggered, this, &MainWindow::addPort);
-    connect(managePortsAction, &QAction::triggered, this, [this]() {
-        if (m_portListView)
-        {
-            m_portListView->focusPortPanel();
-        }
-    });
     connect(commMonitorAction, &QAction::triggered, this, &MainWindow::openCommMonitor);
     connect(aboutAction, &QAction::triggered, this, [this]() {
         QMessageBox::about(
