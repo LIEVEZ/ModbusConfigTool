@@ -4,6 +4,7 @@
 #include "Domain/Models/comm_frame.h"
 
 #include <QPair>
+#include <QPoint>
 #include <QVector>
 #include <QWidget>
 
@@ -35,12 +36,21 @@ signals:
 private slots:
     void onPauseClicked();
     void onClearClicked();
+    void onCopyClicked();
     void onPortComboChanged(int index);
+    void onTableContextMenuRequested(const QPoint &pos);
+    void onCellDoubleClicked(int row, int column);
+    void onSelectionChanged();
     void flushPendingFrames();
 
 private:
     void appendFrameToTable(const CommFrame &frame);
     void trimExcessRows();
+    QString hexTextAtRow(int row) const;
+    QString rowTextAt(int row) const;
+    QString allHexText() const;
+    void copyToClipboard(const QString &text);
+    void updateCopyButtonState();
 
     static const int kMaxRows = 1000;
     static const int kTrimBatch = 200;
@@ -52,6 +62,7 @@ private:
     QLabel *m_hintLabel = nullptr;
     QPushButton *m_pauseButton = nullptr;
     QPushButton *m_clearButton = nullptr;
+    QPushButton *m_copyButton = nullptr;
     QCheckBox *m_autoScroll = nullptr;
     QTableWidget *m_table = nullptr;
     QTimer *m_flushTimer = nullptr;

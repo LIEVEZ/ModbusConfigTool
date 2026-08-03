@@ -185,6 +185,7 @@ QTableWidget#commMonitorTable::item {
     padding: 4px 6px;
 }
 QPushButton#commMonitorPauseButton,
-QPushButton#commMonitorClearButton {
+QPushButton#commMonitorClearButton,
+QPushButton#commMonitorCopyButton {
     min-width: 64px;
 }

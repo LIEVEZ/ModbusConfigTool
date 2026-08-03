@@ -1,15 +1,21 @@
 ﻿#include "comm_monitor_view.h"
 
 #include <QAbstractItemView>
+#include <QAction>
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
+#include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QToolTip>
 #include <QVBoxLayout>
 
 namespace
@@ -52,6 +58,11 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     m_clearButton->setObjectName(QStringLiteral("commMonitorClearButton"));
     m_clearButton->setCursor(Qt::PointingHandCursor);
 
+    m_copyButton = new QPushButton(QStringLiteral("复制HEX"), toolbar);
+    m_copyButton->setObjectName(QStringLiteral("commMonitorCopyButton"));
+    m_copyButton->setCursor(Qt::PointingHandCursor);
+    m_copyButton->setEnabled(false);
+
     m_autoScroll = new QCheckBox(QStringLiteral("自动滚动"), toolbar);
     m_autoScroll->setObjectName(QStringLiteral("commMonitorAutoScroll"));
     m_autoScroll->setChecked(true);
@@ -60,6 +71,7 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     toolbarLayout->addWidget(m_portCombo, 1);
     toolbarLayout->addWidget(m_pauseButton);
     toolbarLayout->addWidget(m_clearButton);
+    toolbarLayout->addWidget(m_copyButton);
     toolbarLayout->addWidget(m_autoScroll);
 
     m_hintLabel = new QLabel(QStringLiteral("请选择要监控的连接端口"), this);
@@ -86,6 +98,7 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_table->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_table->setContextMenuPolicy(Qt::CustomContextMenu);
     m_table->verticalHeader()->setDefaultSectionSize(22);
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     m_table->horizontalHeader()->setStretchLastSection(true);
@@ -116,6 +129,13 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
 
     connect(m_pauseButton, &QPushButton::clicked, this, &CommMonitorView::onPauseClicked);
     connect(m_clearButton, &QPushButton::clicked, this, &CommMonitorView::onClearClicked);
+    connect(m_copyButton, &QPushButton::clicked, this, &CommMonitorView::onCopyClicked);
+    connect(m_table, &QWidget::customContextMenuRequested,
+            this, &CommMonitorView::onTableContextMenuRequested);
+    connect(m_table, &QTableWidget::itemSelectionChanged,
+            this, &CommMonitorView::onSelectionChanged);
+    connect(m_table, &QTableWidget::cellDoubleClicked,
+            this, &CommMonitorView::onCellDoubleClicked);
     connect(m_portCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CommMonitorView::onPortComboChanged);
 }
@@ -172,6 +192,7 @@ void CommMonitorView::clearFrames()
     m_flushTimer->stop();
     m_pendingFrames.clear();
     m_table->setRowCount(0);
+    updateCopyButtonState();
 }
 
 void CommMonitorView::appendFrame(const CommFrame &frame)
@@ -293,6 +314,7 @@ void CommMonitorView::trimExcessRows()
             m_table->setItem(row, col, items.at(col));
         }
     }
+    updateCopyButtonState();
 }
 
 void CommMonitorView::onPauseClicked()
@@ -319,5 +341,118 @@ void CommMonitorView::onPortComboChanged(int index)
         return;
     }
     emit monitorPortChanged(selectedPortId());
+}
+
+void CommMonitorView::onCopyClicked()
+{
+    const int row = m_table->currentRow();
+    if (row < 0)
+    {
+        QToolTip::showText(QCursor::pos(), QStringLiteral("请先选择一行"), this);
+        return;
+    }
+    copyToClipboard(hexTextAtRow(row));
+}
+
+void CommMonitorView::onSelectionChanged()
+{
+    updateCopyButtonState();
+}
+
+void CommMonitorView::updateCopyButtonState()
+{
+    m_copyButton->setEnabled(m_table->currentRow() >= 0);
+}
+
+void CommMonitorView::onCellDoubleClicked(int row, int column)
+{
+    if (column == 6)
+    {
+        copyToClipboard(hexTextAtRow(row));
+    }
+}
+
+void CommMonitorView::onTableContextMenuRequested(const QPoint &pos)
+{
+    QMenu menu(this);
+    const int row = m_table->rowAt(pos.y());
+    const bool hasRow = row >= 0;
+
+    QAction *copyHexAction = menu.addAction(QStringLiteral("复制HEX"));
+    copyHexAction->setEnabled(hasRow);
+    QAction *copyRowAction = menu.addAction(QStringLiteral("复制整行"));
+    copyRowAction->setEnabled(hasRow);
+    menu.addSeparator();
+    QAction *copyAllAction = menu.addAction(QStringLiteral("复制全部HEX"));
+    copyAllAction->setEnabled(m_table->rowCount() > 0);
+
+    QAction *chosen = menu.exec(m_table->viewport()->mapToGlobal(pos));
+    if (chosen == copyHexAction)
+    {
+        copyToClipboard(hexTextAtRow(row));
+    }
+    else if (chosen == copyRowAction)
+    {
+        copyToClipboard(rowTextAt(row));
+    }
+    else if (chosen == copyAllAction)
+    {
+        copyToClipboard(allHexText());
+    }
+}
+
+QString CommMonitorView::hexTextAtRow(int row) const
+{
+    if (row < 0 || row >= m_table->rowCount())
+    {
+        return QString();
+    }
+    QTableWidgetItem *item = m_table->item(row, 6);
+    return item ? item->text().trimmed() : QString();
+}
+
+QString CommMonitorView::rowTextAt(int row) const
+{
+    if (row < 0 || row >= m_table->rowCount())
+    {
+        return QString();
+    }
+    QStringList parts;
+    parts.reserve(m_table->columnCount());
+    for (int col = 0; col < m_table->columnCount(); ++col)
+    {
+        QTableWidgetItem *item = m_table->item(row, col);
+        parts.append(item ? item->text() : QString());
+    }
+    return parts.join(QLatin1Char('\t'));
+}
+
+QString CommMonitorView::allHexText() const
+{
+    QStringList lines;
+    lines.reserve(m_table->rowCount());
+    for (int row = 0; row < m_table->rowCount(); ++row)
+    {
+        const QString hex = hexTextAtRow(row);
+        if (!hex.isEmpty())
+        {
+            lines.append(hex);
+        }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+void CommMonitorView::copyToClipboard(const QString &text)
+{
+    if (text.isEmpty())
+    {
+        QToolTip::showText(QCursor::pos(), QStringLiteral("没有可复制的内容"), this);
+        return;
+    }
+    if (QClipboard *clipboard = QApplication::clipboard())
+    {
+        clipboard->setText(text);
+    }
+    QToolTip::showText(QCursor::pos(), QStringLiteral("已复制到剪贴板"), this);
 }
 
