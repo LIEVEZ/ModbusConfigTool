@@ -20,7 +20,9 @@ QString quoteCsv(const QString &text)
     return QStringLiteral("\"") + escaped + QStringLiteral("\"");
 }
 
-QStringList parseCsvLine(const QString &line)
+// quotesBalanced 为可空输出参数：解析结束时若仍处于引号内部则置 false，
+// 用于判断该文本是否为一条完整记录（引号内允许换行，记录可能跨多个物理行）。
+QStringList parseCsvLine(const QString &line, bool *quotesBalanced = nullptr)
 {
     QStringList fields;
     QString field;
@@ -51,6 +53,10 @@ QStringList parseCsvLine(const QString &line)
         }
     }
     fields.append(field);
+    if (quotesBalanced)
+    {
+        *quotesBalanced = !quoted;
+    }
     return fields;
 }
 
@@ -275,24 +281,19 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
     int lineNumber = 1;
     int skippedRows = 0;
     QStringList skipNotes;
+    QString recordText;
+    int recordStartLine = 0;
 
-    while (!stream.atEnd())
-    {
-        ++lineNumber;
-        const QString line = stream.readLine();
-        if (line.trimmed().isEmpty())
-        {
-            continue;
-        }
-
-        const QStringList fields = parseCsvLine(line);
+    // 处理一条完整记录（引号内允许换行，一条记录可能跨多个物理行）。
+    // 返回 false 表示已设置致命错误，导入应立即中止。
+    const auto handleRecord = [&](const QStringList &fields, int rowLine) -> bool {
         if (fields.size() != headers.size())
         {
             output.result = OperationResult::fail(
                 QStringLiteral("column_count"),
                 QStringLiteral("line"),
-                QStringLiteral("CSV 第 %1 行列数不匹配").arg(lineNumber));
-            return output;
+                QStringLiteral("CSV 第 %1 行列数不匹配").arg(rowLine));
+            return false;
         }
 
         const auto field = [&](const QStringList &aliases) {
@@ -305,9 +306,9 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             ++skippedRows;
             if (skipNotes.size() < 8)
             {
-                skipNotes.append(QStringLiteral("第%1行：缺少数据类型（块定义已跳过）").arg(lineNumber));
+                skipNotes.append(QStringLiteral("第%1行：缺少数据类型（块定义已跳过）").arg(rowLine));
             }
-            continue;
+            return true;
         }
 
         DataType dataType = DataType::UInt16;
@@ -316,8 +317,8 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             output.result = OperationResult::fail(
                 QStringLiteral("invalid_type"),
                 QStringLiteral("data_type"),
-                QStringLiteral("CSV 第 %1 行数据类型无效：%2").arg(lineNumber).arg(dataTypeText));
-            return output;
+                QStringLiteral("CSV 第 %1 行数据类型无效：%2").arg(rowLine).arg(dataTypeText));
+            return false;
         }
 
         const quint16 expectedCount = ProjectFactory::registerCountFor(dataType);
@@ -333,11 +334,11 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
                 {
                     skipNotes.append(
                         QStringLiteral("第%1行：quantity=%2 与类型宽度%3不符，已跳过")
-                            .arg(lineNumber)
+                            .arg(rowLine)
                             .arg(quantity)
                             .arg(expectedCount));
                 }
-                continue;
+                return true;
             }
         }
 
@@ -381,8 +382,8 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             output.result = OperationResult::fail(
                 QStringLiteral("invalid_address"),
                 QStringLiteral("address"),
-                QStringLiteral("CSV 第 %1 行地址无效").arg(lineNumber));
-            return output;
+                QStringLiteral("CSV 第 %1 行地址无效").arg(rowLine));
+            return false;
         }
 
         RegisterPoint point = ProjectFactory::createRegister(groupId, quint16(addressValue));
@@ -474,7 +475,7 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             if (!minimum.result.success)
             {
                 output.result = minimum.result;
-                return output;
+                return false;
             }
             point.minimumValue = minimum.value;
         }
@@ -485,7 +486,7 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             if (!maximum.result.success)
             {
                 output.result = maximum.result;
-                return output;
+                return false;
             }
             point.maximumValue = maximum.value;
         }
@@ -498,7 +499,7 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
                 if (!value.result.success)
                 {
                     output.result = value.result;
-                    return output;
+                    return false;
                 }
                 point.currentValue = value.value;
             }
@@ -552,13 +553,48 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             if (skipNotes.size() < 8)
             {
                 skipNotes.append(QStringLiteral("第%1行：地址 %2 与本文件内已有点重叠，已跳过")
-                                     .arg(lineNumber)
+                                     .arg(rowLine)
                                      .arg(point.address));
             }
-            continue;
+            return true;
         }
 
         output.registers.append(point);
+        return true;
+    };
+
+    while (!stream.atEnd() || !recordText.isEmpty())
+    {
+        if (!stream.atEnd())
+        {
+            ++lineNumber;
+            const QString line = stream.readLine();
+            if (recordText.isEmpty())
+            {
+                if (line.trimmed().isEmpty())
+                {
+                    continue; // 空行跳过；跨行单元格内部的空行由拼接逻辑保留
+                }
+                recordStartLine = lineNumber;
+            }
+            if (!recordText.isEmpty())
+            {
+                recordText += QLatin1Char('\n');
+            }
+            recordText += line;
+        }
+
+        bool quotesBalanced = true;
+        const QStringList fields = parseCsvLine(recordText, &quotesBalanced);
+        if (!quotesBalanced && !stream.atEnd())
+        {
+            continue; // 引号未闭合，说明单元格跨行，继续拼接下一物理行
+        }
+        recordText.clear();
+        if (!handleRecord(fields, recordStartLine))
+        {
+            return output;
+        }
     }
 
     if (output.registers.isEmpty())
