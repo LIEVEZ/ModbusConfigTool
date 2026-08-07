@@ -6,14 +6,19 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDateTime>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSaveFile>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTextStream>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -63,6 +68,11 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     m_copyButton->setCursor(Qt::PointingHandCursor);
     m_copyButton->setEnabled(false);
 
+    m_exportButton = new QPushButton(QStringLiteral("导出"), toolbar);
+    m_exportButton->setObjectName(QStringLiteral("commMonitorExportButton"));
+    m_exportButton->setCursor(Qt::PointingHandCursor);
+    m_exportButton->setEnabled(false);
+
     m_autoScroll = new QCheckBox(QStringLiteral("自动滚动"), toolbar);
     m_autoScroll->setObjectName(QStringLiteral("commMonitorAutoScroll"));
     m_autoScroll->setChecked(true);
@@ -72,6 +82,7 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     toolbarLayout->addWidget(m_pauseButton);
     toolbarLayout->addWidget(m_clearButton);
     toolbarLayout->addWidget(m_copyButton);
+    toolbarLayout->addWidget(m_exportButton);
     toolbarLayout->addWidget(m_autoScroll);
 
     m_hintLabel = new QLabel(QStringLiteral("请选择要监控的连接端口"), this);
@@ -130,6 +141,7 @@ CommMonitorView::CommMonitorView(QWidget *parent) : QWidget(parent)
     connect(m_pauseButton, &QPushButton::clicked, this, &CommMonitorView::onPauseClicked);
     connect(m_clearButton, &QPushButton::clicked, this, &CommMonitorView::onClearClicked);
     connect(m_copyButton, &QPushButton::clicked, this, &CommMonitorView::onCopyClicked);
+    connect(m_exportButton, &QPushButton::clicked, this, &CommMonitorView::onExportClicked);
     connect(m_table, &QWidget::customContextMenuRequested,
             this, &CommMonitorView::onTableContextMenuRequested);
     connect(m_table, &QTableWidget::itemSelectionChanged,
@@ -192,7 +204,7 @@ void CommMonitorView::clearFrames()
     m_flushTimer->stop();
     m_pendingFrames.clear();
     m_table->setRowCount(0);
-    updateCopyButtonState();
+    updateActionStates();
 }
 
 void CommMonitorView::appendFrame(const CommFrame &frame)
@@ -314,7 +326,7 @@ void CommMonitorView::trimExcessRows()
             m_table->setItem(row, col, items.at(col));
         }
     }
-    updateCopyButtonState();
+    updateActionStates();
 }
 
 void CommMonitorView::onPauseClicked()
@@ -356,12 +368,75 @@ void CommMonitorView::onCopyClicked()
 
 void CommMonitorView::onSelectionChanged()
 {
-    updateCopyButtonState();
+    updateActionStates();
 }
 
-void CommMonitorView::updateCopyButtonState()
+void CommMonitorView::updateActionStates()
 {
     m_copyButton->setEnabled(m_table->currentRow() >= 0);
+    m_exportButton->setEnabled(m_table->rowCount() > 0);
+}
+
+void CommMonitorView::onExportClicked()
+{
+    if (m_table->rowCount() <= 0)
+    {
+        QToolTip::showText(QCursor::pos(), QStringLiteral("没有可导出的消息"), this);
+        return;
+    }
+
+    // 先落盘尚未刷新的帧，保证导出包含最新消息
+    flushPendingFrames();
+
+    const QString defaultName = QStringLiteral("通信监控_%1.txt")
+        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出通信消息"), defaultName, QStringLiteral("文本文件 (*.txt)"));
+    if (path.isEmpty())
+    {
+        return;
+    }
+    if (!exportToFile(path))
+    {
+        QMessageBox::warning(this, QStringLiteral("导出失败"),
+                             QStringLiteral("无法写入文件：%1").arg(path));
+        return;
+    }
+    QToolTip::showText(QCursor::pos(),
+                       QStringLiteral("已导出 %1 条消息").arg(m_table->rowCount()), this);
+}
+
+bool CommMonitorView::exportToFile(const QString &path) const
+{
+    if (m_table->rowCount() <= 0)
+    {
+        return false;
+    }
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        return false;
+    }
+
+    file.write("\xEF\xBB\xBF"); // UTF-8 BOM，便于 Excel / 记事本识别中文
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+
+    QStringList header;
+    header.reserve(m_table->columnCount());
+    for (int col = 0; col < m_table->columnCount(); ++col)
+    {
+        header.append(m_table->horizontalHeaderItem(col)->text());
+    }
+    stream << header.join(QLatin1Char('\t')) << '\n';
+    for (int row = 0; row < m_table->rowCount(); ++row)
+    {
+        stream << rowTextAt(row) << '\n';
+    }
+
+    stream.flush();
+    return file.commit();
 }
 
 void CommMonitorView::onCellDoubleClicked(int row, int column)

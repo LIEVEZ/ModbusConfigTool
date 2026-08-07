@@ -29,6 +29,9 @@ public:
     void appendFrame(const CommFrame &frame);
     void clearFrames();
     bool isPaused() const;
+    // 把当前表格中的全部消息导出到 path（UTF-8 带 BOM，表头 + 每行一条消息）。
+    // 表格为空或写入失败返回 false。
+    bool exportToFile(const QString &path) const;
 
 signals:
     void monitorPortChanged(const QString &portId);
@@ -37,6 +40,7 @@ private slots:
     void onPauseClicked();
     void onClearClicked();
     void onCopyClicked();
+    void onExportClicked();
     void onPortComboChanged(int index);
     void onTableContextMenuRequested(const QPoint &pos);
     void onCellDoubleClicked(int row, int column);
@@ -50,7 +54,7 @@ private:
     QString rowTextAt(int row) const;
     QString allHexText() const;
     void copyToClipboard(const QString &text);
-    void updateCopyButtonState();
+    void updateActionStates();
 
     static const int kMaxRows = 1000;
     static const int kTrimBatch = 200;
@@ -63,6 +67,7 @@ private:
     QPushButton *m_pauseButton = nullptr;
     QPushButton *m_clearButton = nullptr;
     QPushButton *m_copyButton = nullptr;
+    QPushButton *m_exportButton = nullptr;
     QCheckBox *m_autoScroll = nullptr;
     QTableWidget *m_table = nullptr;
     QTimer *m_flushTimer = nullptr;
