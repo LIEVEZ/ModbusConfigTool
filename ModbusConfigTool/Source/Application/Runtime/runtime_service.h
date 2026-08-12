@@ -43,6 +43,8 @@ private:
 
     static QList<RegisterPoint> collectPointsForPort(const ProjectDocument &document,
                                                      const QString &portId);
+    static QHash<QString, QString> groupNamesForPort(const ProjectDocument &document,
+                                                     const QString &portId);
     void setPortState(const QString &portId, RuntimeState state);
     void teardownPort(const QString &portId);
 

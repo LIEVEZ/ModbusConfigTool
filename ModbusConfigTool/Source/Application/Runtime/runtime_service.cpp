@@ -6,6 +6,8 @@
 #include <QSet>
 #include <QThread>
 
+#include <algorithm>
+
 RuntimeService::RuntimeService(QObject *parent) : QObject(parent)
 {
     qRegisterMetaType<ServerProfile>();
@@ -47,6 +49,20 @@ QList<RegisterPoint> RuntimeService::collectPointsForPort(const ProjectDocument 
         }
     }
     return points;
+}
+
+QHash<QString, QString> RuntimeService::groupNamesForPort(const ProjectDocument &document,
+                                                          const QString &portId)
+{
+    QHash<QString, QString> names;
+    for (const RegisterGroup &group : document.groups)
+    {
+        if (group.portId == portId && group.enabled)
+        {
+            names.insert(group.id, group.name);
+        }
+    }
+    return names;
 }
 
 void RuntimeService::startPort(const ProjectDocument &document, const QString &portId)
@@ -109,9 +125,14 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
 
     setPortState(portId, RuntimeState::Starting);
     const QList<RegisterPoint> points = collectPointsForPort(document, portId);
+    const QHash<QString, QString> groupNames = groupNamesForPort(document, portId);
+    QStringList groupNameList = groupNames.values();
+    std::sort(groupNameList.begin(), groupNameList.end());
     emit portDiagnostics(portId,
-                         QStringLiteral("准备启动：绑定启用分组点位 %1 个，%2 %3:%4")
+                         QStringLiteral("准备启动：绑定启用分组点位 %1 个（%2），%3 %4:%5")
                              .arg(points.size())
+                             .arg(groupNameList.isEmpty() ? QStringLiteral("无")
+                                                          : groupNameList.join(QStringLiteral("、")))
                              .arg(port->profile.connectionType == ConnectionType::Tcp
                                       ? QStringLiteral("TCP")
                                       : QStringLiteral("RTU"))
@@ -125,8 +146,8 @@ void RuntimeService::startPort(const ProjectDocument &document, const QString &p
     // 使用 functor 排队调用，避免 QList<RegisterPoint> 通过 Q_ARG 跨线程拷贝异常
     const ServerProfile profile = port->profile;
     ModbusRuntimeWorker *worker = runtime.worker;
-    const bool invoked = QMetaObject::invokeMethod(worker, [worker, profile, points]() {
-        worker->start(profile, points);
+    const bool invoked = QMetaObject::invokeMethod(worker, [worker, profile, points, groupNames]() {
+        worker->start(profile, points, groupNames);
     }, Qt::QueuedConnection);
     if (!invoked)
     {
@@ -154,9 +175,10 @@ void RuntimeService::reloadRunningPorts(const ProjectDocument &document)
 
         const QString portId = it.key();
         const QList<RegisterPoint> points = collectPointsForPort(document, portId);
+        const QHash<QString, QString> groupNames = groupNamesForPort(document, portId);
         ModbusRuntimeWorker *worker = runtime.worker;
-        const bool invoked = QMetaObject::invokeMethod(worker, [worker, points]() {
-            worker->reloadPoints(points);
+        const bool invoked = QMetaObject::invokeMethod(worker, [worker, points, groupNames]() {
+            worker->reloadPoints(points, groupNames);
         }, Qt::QueuedConnection);
         if (!invoked)
         {
@@ -165,9 +187,13 @@ void RuntimeService::reloadRunningPorts(const ProjectDocument &document)
                            QStringLiteral("QMetaObject::invokeMethod 失败"));
             continue;
         }
+        QStringList groupNameList = groupNames.values();
+        std::sort(groupNameList.begin(), groupNameList.end());
         emit portDiagnostics(portId,
-                             QStringLiteral("热更新映射：启用绑定分组点位 %1 个")
-                                 .arg(points.size()));
+                             QStringLiteral("热更新映射：启用绑定分组点位 %1 个（%2）")
+                                 .arg(points.size())
+                                 .arg(groupNameList.isEmpty() ? QStringLiteral("无")
+                                                              : groupNameList.join(QStringLiteral("、"))));
     }
 }
 

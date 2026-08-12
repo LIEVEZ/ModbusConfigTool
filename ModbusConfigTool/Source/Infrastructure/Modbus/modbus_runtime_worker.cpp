@@ -9,16 +9,77 @@
 
 #include <algorithm>
 
+namespace
+{
+struct PointRange
+{
+    quint8 slave;
+    int start;
+    int end;
+};
+
+// 把一个分组内指定表的点位按从站合并成连续区间，输出 S3[4096-4096] 形式。
+// 仅用于日志展示，不改变实际映射块（由 ModbusRegisterStore 管理）。
+QString mergeRangesText(const QList<RegisterPoint> &points, StorageType table)
+{
+    QVector<PointRange> ranges;
+    for (const RegisterPoint &point : points)
+    {
+        if (point.storageType != table)
+        {
+            continue;
+        }
+        const int count = qMax(1, int(point.registerCount));
+        ranges.append({point.slaveAddress, int(point.address), int(point.address) + count - 1});
+    }
+    if (ranges.isEmpty())
+    {
+        return QString();
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const PointRange &left, const PointRange &right) {
+        if (left.slave != right.slave)
+        {
+            return left.slave < right.slave;
+        }
+        return left.start < right.start;
+    });
+
+    QStringList parts;
+    quint8 currentSlave = ranges.first().slave;
+    int currentStart = ranges.first().start;
+    int currentEnd = ranges.first().end;
+    for (int index = 1; index < ranges.size(); ++index)
+    {
+        const PointRange &range = ranges.at(index);
+        if (range.slave == currentSlave && range.start <= currentEnd + 1)
+        {
+            currentEnd = qMax(currentEnd, range.end);
+            continue;
+        }
+        parts.append(QStringLiteral("S%1[%2-%3]")
+                         .arg(currentSlave).arg(currentStart).arg(currentEnd));
+        currentSlave = range.slave;
+        currentStart = range.start;
+        currentEnd = range.end;
+    }
+    parts.append(QStringLiteral("S%1[%2-%3]")
+                     .arg(currentSlave).arg(currentStart).arg(currentEnd));
+    return parts.join(QStringLiteral(", "));
+}
+} // namespace
+
 ModbusRuntimeWorker::ModbusRuntimeWorker(QObject *parent)
     : QObject(parent)
 {
 }
 
 void ModbusRuntimeWorker::start(const ServerProfile &profile,
-                                const QList<RegisterPoint> &points)
+                                const QList<RegisterPoint> &points,
+                                const QHash<QString, QString> &groupNames)
 {
     stop();
     m_profile = profile;
+    m_groupNames = groupNames;
 
     m_server = new MultiSlaveModbusServer(&m_store, this);
     connect(m_server, &MultiSlaveModbusServer::frameCaptured,
@@ -59,13 +120,15 @@ void ModbusRuntimeWorker::start(const ServerProfile &profile,
     emit started();
 }
 
-void ModbusRuntimeWorker::reloadPoints(const QList<RegisterPoint> &points)
+void ModbusRuntimeWorker::reloadPoints(const QList<RegisterPoint> &points,
+                                       const QHash<QString, QString> &groupNames)
 {
     if (!m_server)
     {
         return;
     }
 
+    m_groupNames = groupNames;
     rebuildMap(points, true);
     const QList<quint8> slaves = m_store.slaveAddresses();
     QStringList slaveText;
@@ -124,6 +187,45 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
         .arg(m_store.summary(QModbusDataUnit::HoldingRegisters))
         .arg(m_store.blockCount(QModbusDataUnit::InputRegisters))
         .arg(m_store.summary(QModbusDataUnit::InputRegisters)));
+
+    // 按分组输出地址映射，便于确认每个分组绑定了哪些寄存器区间
+    QHash<QString, QList<RegisterPoint>> pointsByGroup;
+    const QList<RegisterPoint> mappedPoints = m_points.values();
+    for (const RegisterPoint &point : mappedPoints)
+    {
+        pointsByGroup[point.groupId].append(point);
+    }
+    QList<QPair<QString, QString>> groupLines; // (分组名, 日志行)，按名称排序输出
+    for (auto it = pointsByGroup.constBegin(); it != pointsByGroup.constEnd(); ++it)
+    {
+        const QString label = m_groupNames.value(it.key(), QStringLiteral("未命名分组"));
+        const QString holdingText = mergeRangesText(it.value(), StorageType::Holding);
+        const QString inputText = mergeRangesText(it.value(), StorageType::Input);
+        QStringList sections;
+        if (!holdingText.isEmpty())
+        {
+            sections.append(QStringLiteral("Holding %1").arg(holdingText));
+        }
+        if (!inputText.isEmpty())
+        {
+            sections.append(QStringLiteral("Input %1").arg(inputText));
+        }
+        if (sections.isEmpty())
+        {
+            continue;
+        }
+        groupLines.append(qMakePair(label, QStringLiteral("分组映射「%1」: %2（%3 点位）")
+                                        .arg(label, sections.join(QStringLiteral("; ")),
+                                             QString::number(it.value().size()))));
+    }
+    std::sort(groupLines.begin(), groupLines.end(),
+              [](const QPair<QString, QString> &left, const QPair<QString, QString> &right) {
+                  return QString::localeAwareCompare(left.first, right.first) < 0;
+              });
+    for (const auto &line : groupLines)
+    {
+        emit diagnostics(line.second);
+    }
 
     if (!restartStrategy || m_points.isEmpty())
     {

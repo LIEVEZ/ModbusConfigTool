@@ -5,6 +5,7 @@
 #include "Domain/Models/project_document.h"
 #include "Infrastructure/Modbus/modbus_register_store.h"
 
+#include <QHash>
 #include <QModbusDataUnit>
 #include <QObject>
 
@@ -19,8 +20,11 @@ public:
     explicit ModbusRuntimeWorker(QObject *parent = nullptr);
 
 public slots:
-    void start(const ServerProfile &profile, const QList<RegisterPoint> &points);
-    void reloadPoints(const QList<RegisterPoint> &points);
+    void start(const ServerProfile &profile,
+               const QList<RegisterPoint> &points,
+               const QHash<QString, QString> &groupNames);
+    void reloadPoints(const QList<RegisterPoint> &points,
+                      const QHash<QString, QString> &groupNames);
     void stop();
     void writePoint(const QString &pointId, const RegisterValue &value);
 
@@ -40,6 +44,7 @@ private:
     StrategyEngine *m_strategyEngine = nullptr;
     ServerProfile m_profile;
     QHash<QString, RegisterPoint> m_points;
+    QHash<QString, QString> m_groupNames; // groupId -> 分组名，用于映射日志
     ModbusRegisterStore m_store;
 };
 
