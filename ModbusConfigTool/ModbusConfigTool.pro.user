@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 17.0.0, 2026-07-17T09:54:11. -->
+<!-- Written by QtCreator 17.0.0, 2026-08-07T18:00:54. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -169,7 +169,7 @@
      <value type="bool" key="RunConfiguration.UseCppDebuggerAuto">true</value>
      <value type="bool" key="RunConfiguration.UseLibrarySearchPath">true</value>
      <value type="bool" key="RunConfiguration.UseQmlDebuggerAuto">true</value>
-     <value type="QString" key="RunConfiguration.WorkingDirectory.default">E:/04_Git/01_github/ModbusConfigTool/ModbusConfigTool/build</value>
+     <value type="QString" key="RunConfiguration.WorkingDirectory.default">E:/04_Git/01_github/ModbusConfigTool/ModbusConfigTool/build/bin</value>
     </valuemap>
     <value type="qlonglong" key="ProjectExplorer.Target.RunConfigurationCount">1</value>
     <value type="int" key="Qt4ProjectManager.Qt4BuildConfiguration.BuildConfiguration">0</value>
@@ -207,7 +207,7 @@
     <value type="bool" key="RunConfiguration.UseCppDebuggerAuto">true</value>
     <value type="bool" key="RunConfiguration.UseLibrarySearchPath">true</value>
     <value type="bool" key="RunConfiguration.UseQmlDebuggerAuto">true</value>
-    <value type="QString" key="RunConfiguration.WorkingDirectory.default">E:/04_Git/01_github/ModbusConfigTool/ModbusConfigTool/build</value>
+    <value type="QString" key="RunConfiguration.WorkingDirectory.default">E:/04_Git/01_github/ModbusConfigTool/ModbusConfigTool/build/bin</value>
    </valuemap>
    <value type="qlonglong" key="ProjectExplorer.Target.RunConfigurationCount">1</value>
   </valuemap>
