@@ -83,7 +83,9 @@ ConnectionConfigDialog::ConnectionConfigDialog(const ConnectionPort &port, QWidg
         QStringLiteral("57600"), QStringLiteral("115200")
     });
     m_parity = new QComboBox(rtuPage);
-    m_parity->addItems({QStringLiteral("N"), QStringLiteral("E"), QStringLiteral("O")});
+    m_parity->addItem(QStringLiteral("无校验"), QStringLiteral("N"));
+    m_parity->addItem(QStringLiteral("奇校验"), QStringLiteral("O"));
+    m_parity->addItem(QStringLiteral("偶校验"), QStringLiteral("E"));
     rtuForm->addRow(QStringLiteral("串口"), m_serialPort);
     rtuForm->addRow(QStringLiteral("波特率"), m_baudRate);
     rtuForm->addRow(QStringLiteral("校验位"), m_parity);
@@ -103,7 +105,8 @@ ConnectionConfigDialog::ConnectionConfigDialog(const ConnectionPort &port, QWidg
     m_pollInterval->setValue(port.profile.pollIntervalMs);
     m_serialPort->setCurrentText(port.profile.serialPort);
     m_baudRate->setCurrentText(QString::number(port.profile.baudRate));
-    m_parity->setCurrentText(QString(port.profile.parity));
+    const int parityIndex = m_parity->findData(QString(port.profile.parity));
+    m_parity->setCurrentIndex(parityIndex >= 0 ? parityIndex : 0);
     m_pages->setCurrentIndex(m_type->currentIndex());
 
     connect(m_type, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -124,9 +127,8 @@ ConnectionPort ConnectionConfigDialog::port() const
     output.profile.tcpPort = quint16(m_port->value());
     output.profile.serialPort = m_serialPort->currentText();
     output.profile.baudRate = m_baudRate->currentText().toInt();
-    output.profile.parity = m_parity->currentText().isEmpty()
-        ? QLatin1Char('N')
-        : m_parity->currentText().at(0);
+    const QString parity = m_parity->currentData().toString();
+    output.profile.parity = parity.isEmpty() ? QLatin1Char('N') : parity.at(0);
     output.profile.pollIntervalMs = m_pollInterval->value();
     return output;
 }
