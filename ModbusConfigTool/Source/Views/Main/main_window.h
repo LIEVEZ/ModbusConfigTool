@@ -76,6 +76,7 @@ private:
     void updateCommMonitorPort();
     void onCommFrameCaptured(const QString &portId, const CommFrame &frame);
     QString portNameById(const QString &portId) const;
+    QString portDisplayName(const QString &portId) const;
 
     MainWindowViewModel *m_viewModel = nullptr;
     ConnectionPortListView *m_portListView = nullptr;

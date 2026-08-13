@@ -227,7 +227,8 @@ void MainWindow::connectActions()
         m_portListView->updatePortState(portId, state);
         m_canvasView->updatePortStates(m_portStates);
         m_logView->appendMessage(QStringLiteral("RUNTIME"), QStringLiteral("MODBUS"),
-                                 QStringLiteral("端口 %1: %2").arg(portId, runtimeStateToString(state)));
+                                 QStringLiteral("端口 %1: %2")
+                                     .arg(portDisplayName(portId), runtimeStateToString(state)));
         refreshStatus();
     });
 
@@ -235,16 +236,19 @@ void MainWindow::connectActions()
             [this](const QString &portId, const QString &message, const QString &detail)
     {
         m_logView->appendMessage(QStringLiteral("ERROR"), QStringLiteral("MODBUS"),
-                                 QStringLiteral("端口 %1: %2 - %3").arg(portId, message, detail));
+                                 QStringLiteral("端口 %1: %2 - %3")
+                                     .arg(portDisplayName(portId), message, detail));
         QMessageBox::critical(this, QStringLiteral("运行时错误"),
-                              QStringLiteral("端口 %1\n%2\n%3").arg(portId, message, detail));
+                              QStringLiteral("端口 %1\n%2\n%3")
+                                  .arg(portDisplayName(portId), message, detail));
     });
 
     connect(m_viewModel, &MainWindowViewModel::runtimeDiagnostics, this,
             [this](const QString &portId, const QString &message)
     {
         m_logView->appendMessage(QStringLiteral("INFO"), QStringLiteral("MODBUS"),
-                                 QStringLiteral("端口 %1: %2").arg(portId, message));
+                                 QStringLiteral("端口 %1: %2")
+                                     .arg(portDisplayName(portId), message));
     });
 
     connect(m_viewModel, &MainWindowViewModel::commFrameCaptured,
@@ -715,6 +719,26 @@ void MainWindow::addPort()
 
 void MainWindow::editPort(const QString &portId)
 {
+    const RuntimeState state = m_viewModel->portState(portId);
+    if (state == RuntimeState::Running)
+    {
+        if (QMessageBox::question(this,
+                                  QStringLiteral("编辑端口"),
+                                  QStringLiteral("端口正在连接中，编辑配置需要先断开。\n是否断开并继续编辑？"))
+            != QMessageBox::Yes)
+        {
+            return;
+        }
+        m_viewModel->stopPort(portId);
+    }
+    else if (state == RuntimeState::Starting || state == RuntimeState::Stopping)
+    {
+        QMessageBox::information(this,
+                                 QStringLiteral("编辑端口"),
+                                 QStringLiteral("端口正在启动或断开中，请稍候再编辑。"));
+        return;
+    }
+
     const ProjectDocument &doc = m_viewModel->document();
     for (const ConnectionPort &port : doc.ports)
     {
@@ -1200,4 +1224,25 @@ QString MainWindow::portNameById(const QString &portId) const
         }
     }
     return QString();
+}
+
+QString MainWindow::portDisplayName(const QString &portId) const
+{
+    if (!m_viewModel)
+    {
+        return portId;
+    }
+    // 端口号 + 名称，例如 "COM3 · 主站"；端口已删除时保留原始 ID 以便排查
+    for (const ConnectionPort &port : m_viewModel->document().ports)
+    {
+        if (port.id == portId)
+        {
+            const QString name = port.name.isEmpty() ? QStringLiteral("默认端口") : port.name;
+            const QString endpoint = port.profile.connectionType == ConnectionType::Tcp
+                ? QStringLiteral("%1:%2").arg(port.profile.tcpHost).arg(port.profile.tcpPort)
+                : port.profile.serialPort;
+            return QStringLiteral("%1 · %2").arg(endpoint, name);
+        }
+    }
+    return portId;
 }
