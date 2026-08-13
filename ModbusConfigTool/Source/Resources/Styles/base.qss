@@ -121,6 +121,29 @@ QPlainTextEdit#eventLogConsole {
     color: rgba(38, 37, 30, 190);
     font: 12px Consolas, monospace;
 }
+QWidget#eventLogFilterRow {
+    background: transparent;
+}
+QComboBox#eventLogFilterLevel, QLineEdit#eventLogFilterText {
+    min-height: 24px;
+    padding: 2px 8px;
+    color: rgba(38, 37, 30, 180);
+    background: #ffffff;
+    border: 1px solid rgba(38, 37, 30, 28);
+    border-radius: 8px;
+    font-size: 12px;
+}
+QComboBox#eventLogFilterLevel {
+    min-width: 88px;
+}
+QComboBox#eventLogFilterLevel:focus, QLineEdit#eventLogFilterText:focus {
+    border-color: #f54e00;
+}
+QLabel#eventLogFilterCount {
+    color: rgba(38, 37, 30, 140);
+    background: transparent;
+    font-size: 12px;
+}
 QWidget#card, QWidget#runtimeControlCard {
     background: #ebeae5;
     border: 1px solid rgba(38, 37, 30, 28);
