@@ -104,6 +104,15 @@ void MainWindow::buildToolBar()
         importGroupButton->setFixedHeight(32);
     }
 
+    QAction *arrangeCanvasAction = m_workspaceToolBar->addAction(QStringLiteral("整理画布"));
+    arrangeCanvasAction->setObjectName(QStringLiteral("arrangeCanvasToolAction"));
+    if (auto *arrangeCanvasButton = qobject_cast<QToolButton *>(
+            m_workspaceToolBar->widgetForAction(arrangeCanvasAction)))
+    {
+        arrangeCanvasButton->setObjectName(QStringLiteral("arrangeCanvasToolButton"));
+        arrangeCanvasButton->setFixedHeight(32);
+    }
+
     auto *spacer = new QWidget(m_workspaceToolBar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     spacer->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -120,6 +129,7 @@ void MainWindow::buildToolBar()
     connect(addGroupAction, &QAction::triggered, this, &MainWindow::addGroup);
     connect(addPortAction, &QAction::triggered, this, &MainWindow::addPort);
     connect(importGroupAction, &QAction::triggered, this, &MainWindow::importGroup);
+    connect(arrangeCanvasAction, &QAction::triggered, this, &MainWindow::arrangeCanvas);
 }
 
 MainWindow::~MainWindow() = default;
@@ -705,6 +715,19 @@ void MainWindow::importGroup()
     partial.message = message;
     partial.detail = failDetails.join(QStringLiteral("；"));
     showResult(partial, message);
+}
+
+void MainWindow::arrangeCanvas()
+{
+    // 按文档顺序（创建顺序）紧凑排版；位移经 groupMoved → moveGroup 持久化
+    const ProjectDocument &doc = m_viewModel->document();
+    QStringList orderedIds;
+    orderedIds.reserve(doc.groups.size());
+    for (const RegisterGroup &group : doc.groups)
+    {
+        orderedIds.append(group.id);
+    }
+    m_canvasView->arrange(orderedIds);
 }
 
 void MainWindow::addPort()

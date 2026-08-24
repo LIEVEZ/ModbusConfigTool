@@ -5,6 +5,7 @@
 
 #include <QMouseEvent>
 #include <QPainter>
+#include <QScrollArea>
 
 GroupCanvasView::GroupCanvasView(QWidget *parent) : QWidget(parent)
 {
@@ -65,6 +66,67 @@ void GroupCanvasView::setModel(const ProjectDocument &doc,
         }
     }
     applySelectionVisuals();
+    updateCanvasExtent();
+}
+
+void GroupCanvasView::arrange(const QStringList &orderedIds)
+{
+    // 紧凑排版：卡片紧挨排布（卡宽 + 10px 间距），行高取该行最高卡片，
+    // 防止描述换行的卡片相互重叠。
+    const int margin = 40;
+    const int gap = 10;
+
+    // 列数随可得宽度自适应（画布位于 QScrollArea 内时用视口宽度）
+    int viewportWidth = 0;
+    if (QWidget *viewport = parentWidget())
+    {
+        for (QWidget *p = viewport; p; p = p->parentWidget())
+        {
+            if (auto *scroll = qobject_cast<QScrollArea *>(p))
+            {
+                viewportWidth = scroll->viewport()->width();
+                break;
+            }
+        }
+    }
+    if (viewportWidth <= 0)
+    {
+        viewportWidth = width();
+    }
+    const int cardWidth = m_cards.isEmpty() ? 190 : m_cards.first()->width();
+    const int columns = qMax(1, (viewportWidth - margin * 2) / (cardWidth + gap));
+
+    int x = margin;
+    int y = margin;
+    int rowHeight = 0;
+    int column = 0;
+    for (const QString &groupId : orderedIds)
+    {
+        GroupCardWidget *card = m_cards.value(groupId, nullptr);
+        if (!card)
+        {
+            continue;
+        }
+        const QPoint oldPos = card->pos();
+        if (column > 0)
+        {
+            x += card->width() + gap;
+        }
+        rowHeight = qMax(rowHeight, card->height());
+        if (oldPos != QPoint(x, y))
+        {
+            card->move(x, y);
+            emit groupMoved(groupId, x, y);
+        }
+        ++column;
+        if (column == columns)
+        {
+            y += rowHeight + gap;
+            x = margin;
+            rowHeight = 0;
+            column = 0;
+        }
+    }
     updateCanvasExtent();
 }
 

@@ -47,6 +47,7 @@ private:
     bool saveProject(bool saveAs = false);
     void addGroup();
     void importGroup();
+    void arrangeCanvas();
     QString uniqueGroupName(const QString &preferredName, const QString &ignoreGroupId = QString()) const;
     void addPort();
     void editPort(const QString &portId);

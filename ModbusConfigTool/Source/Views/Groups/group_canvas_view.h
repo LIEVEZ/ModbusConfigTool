@@ -21,6 +21,7 @@ public:
     explicit GroupCanvasView(QWidget *parent = nullptr);
     void setModel(const ProjectDocument &doc,
                   const QHash<QString, RuntimeState> &portStates = {});
+    void arrange(const QStringList &orderedIds);
     void setSelectedGroup(const QString &groupId);
     QStringList selectedGroupIds() const;
     bool isGroupSelected(const QString &groupId) const;
