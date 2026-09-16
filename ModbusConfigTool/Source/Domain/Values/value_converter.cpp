@@ -105,6 +105,7 @@ QByteArray valueBytesBinary(const RegisterValue &value)
 
     switch (value.dataType())
     {
+    case DataType::Bool: stream << quint16(value.toUnsigned64() != 0 ? 1 : 0); break;
     case DataType::Int16: stream << qint16(value.toSigned64()); break;
     case DataType::UInt16: stream << quint16(value.toUnsigned64()); break;
     case DataType::Int32: stream << qint32(value.toSigned64()); break;
@@ -234,6 +235,13 @@ ValueResult valueFromBinaryBytes(DataType type, const QByteArray &bytes)
     stream.setByteOrder(QDataStream::BigEndian);
     switch (type)
     {
+    case DataType::Bool:
+    {
+        quint16 v = 0;
+        stream >> v;
+        output.value = RegisterValue::fromUnsigned64(v != 0 ? 1 : 0, type);
+        break;
+    }
     case DataType::Int16:
     {
         qint16 v = 0;

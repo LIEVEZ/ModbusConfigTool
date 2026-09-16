@@ -312,13 +312,24 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
         }
 
         DataType dataType = DataType::UInt16;
+        // BCD 别名：data_type 写 BCD/BCD16 时按 UINT16 处理，编码回落为 BIGBCD
+        bool bcdByType = false;
         if (!dataTypeFromString(dataTypeText, &dataType))
         {
-            output.result = OperationResult::fail(
-                QStringLiteral("invalid_type"),
-                QStringLiteral("data_type"),
-                QStringLiteral("CSV 第 %1 行数据类型无效：%2").arg(rowLine).arg(dataTypeText));
-            return false;
+            const QString upper = dataTypeText.trimmed().toUpper();
+            if (upper == QStringLiteral("BCD") || upper == QStringLiteral("BCD16"))
+            {
+                dataType = DataType::UInt16;
+                bcdByType = true;
+            }
+            else
+            {
+                output.result = OperationResult::fail(
+                    QStringLiteral("invalid_type"),
+                    QStringLiteral("data_type"),
+                    QStringLiteral("CSV 第 %1 行数据类型无效：%2").arg(rowLine).arg(dataTypeText));
+                return false;
+            }
         }
 
         const quint16 expectedCount = ProjectFactory::registerCountFor(dataType);
@@ -423,7 +434,20 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
 
         if (hasAnyHeader(headers, endianAliases))
         {
-            endianFromString(field(endianAliases), &point.endian);
+            const QString endianText = field(endianAliases);
+            if (!endianText.isEmpty())
+            {
+                endianFromString(endianText, &point.endian);
+            }
+            else if (bcdByType)
+            {
+                // data_type 为 BCD 且未指定编码时，默认高位字节在前的 BCD
+                point.endian = Endian::BigBcd;
+            }
+        }
+        else if (bcdByType)
+        {
+            point.endian = Endian::BigBcd;
         }
         if (headers.contains(QStringLiteral("storage_type")))
         {
@@ -435,13 +459,21 @@ CsvImportResult CsvRegisterGatewayImpl::importFile(const QString &path,
             if (parseUIntFlexible(field(readFcAliases), &readCode))
             {
                 point.readFunctionCode = quint8(readCode);
-                if (readCode == 4)
+                if (readCode == 1)
                 {
-                    point.storageType = StorageType::Input;
+                    point.storageType = StorageType::Coil;
+                }
+                else if (readCode == 2)
+                {
+                    point.storageType = StorageType::Discrete;
                 }
                 else if (readCode == 3)
                 {
                     point.storageType = StorageType::Holding;
+                }
+                else if (readCode == 4)
+                {
+                    point.storageType = StorageType::Input;
                 }
             }
         }

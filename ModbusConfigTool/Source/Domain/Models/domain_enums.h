@@ -12,6 +12,7 @@ enum class ConnectionType
 
 enum class DataType
 {
+    Bool,
     Int16,
     UInt16,
     Int32,
@@ -35,7 +36,9 @@ enum class Endian
 enum class StorageType
 {
     Holding,
-    Input
+    Input,
+    Coil,
+    Discrete
 };
 
 enum class StrategyType

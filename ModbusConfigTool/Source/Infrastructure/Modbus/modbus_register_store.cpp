@@ -106,9 +106,17 @@ void ModbusRegisterStore::build(const QList<RegisterPoint> &points, StorageType 
         {
             tables.holding = blocks;
         }
-        else
+        else if (storageType == StorageType::Input)
         {
             tables.input = blocks;
+        }
+        else if (storageType == StorageType::Coil)
+        {
+            tables.coil = blocks;
+        }
+        else if (storageType == StorageType::Discrete)
+        {
+            tables.discrete = blocks;
         }
     }
 
@@ -122,13 +130,43 @@ void ModbusRegisterStore::build(const QList<RegisterPoint> &points, StorageType 
             {
                 value = RegisterValue::fromUnsigned64(value.toUnsigned64(), point.dataType);
             }
-            const ConversionResult encoded = ValueConverter::toRegisters(value, point.endian);
-            const QModbusDataUnit::RegisterType table = storageType == StorageType::Holding
-                ? QModbusDataUnit::HoldingRegisters
-                : QModbusDataUnit::InputRegisters;
-            for (int index = 0; index < encoded.registers.size(); ++index)
+
+            QModbusDataUnit::RegisterType table;
+            if (storageType == StorageType::Holding)
             {
-                writeOne(slave, table, int(point.address) + index, encoded.registers.at(index));
+                table = QModbusDataUnit::HoldingRegisters;
+            }
+            else if (storageType == StorageType::Input)
+            {
+                table = QModbusDataUnit::InputRegisters;
+            }
+            else if (storageType == StorageType::Coil)
+            {
+                table = QModbusDataUnit::Coils;
+            }
+            else if (storageType == StorageType::Discrete)
+            {
+                table = QModbusDataUnit::DiscreteInputs;
+            }
+            else
+            {
+                continue;
+            }
+
+            // Coils 和 Discrete 是位（0/1），直接写入布尔值
+            if (storageType == StorageType::Coil || storageType == StorageType::Discrete)
+            {
+                const quint16 bitValue = (value.toUnsigned64() != 0) ? 1 : 0;
+                writeOne(slave, table, int(point.address), bitValue);
+            }
+            else
+            {
+                // Holding 和 Input 是寄存器（16位），需要编码和字节序转换
+                const ConversionResult encoded = ValueConverter::toRegisters(value, point.endian);
+                for (int index = 0; index < encoded.registers.size(); ++index)
+                {
+                    writeOne(slave, table, int(point.address) + index, encoded.registers.at(index));
+                }
             }
         }
     }
@@ -145,7 +183,8 @@ bool ModbusRegisterStore::isEmpty() const
 {
     for (auto it = m_slaves.constBegin(); it != m_slaves.constEnd(); ++it)
     {
-        if (!it.value().holding.isEmpty() || !it.value().input.isEmpty())
+        if (!it.value().holding.isEmpty() || !it.value().input.isEmpty()
+            || !it.value().coil.isEmpty() || !it.value().discrete.isEmpty())
         {
             return false;
         }
@@ -170,6 +209,14 @@ QVector<ModbusRegisterStore::Block> *ModbusRegisterStore::tableBlocks(
     {
         return &it.value().input;
     }
+    if (table == QModbusDataUnit::Coils)
+    {
+        return &it.value().coil;
+    }
+    if (table == QModbusDataUnit::DiscreteInputs)
+    {
+        return &it.value().discrete;
+    }
     return nullptr;
 }
 
@@ -189,6 +236,14 @@ const QVector<ModbusRegisterStore::Block> *ModbusRegisterStore::tableBlocks(
     if (table == QModbusDataUnit::InputRegisters)
     {
         return &it.value().input;
+    }
+    if (table == QModbusDataUnit::Coils)
+    {
+        return &it.value().coil;
+    }
+    if (table == QModbusDataUnit::DiscreteInputs)
+    {
+        return &it.value().discrete;
     }
     return nullptr;
 }
@@ -230,6 +285,14 @@ int ModbusRegisterStore::blockCount(QModbusDataUnit::RegisterType table) const
         else if (table == QModbusDataUnit::InputRegisters)
         {
             count += it.value().input.size();
+        }
+        else if (table == QModbusDataUnit::Coils)
+        {
+            count += it.value().coil.size();
+        }
+        else if (table == QModbusDataUnit::DiscreteInputs)
+        {
+            count += it.value().discrete.size();
         }
     }
     return count;
@@ -371,6 +434,47 @@ QModbusResponse ModbusRegisterStore::processRequest(quint8 slaveAddress, const Q
     const QModbusPdu::FunctionCode functionCode = request.functionCode();
     switch (functionCode)
     {
+    case QModbusPdu::ReadCoils:
+    case QModbusPdu::ReadDiscreteInputs:
+    {
+        if (request.dataSize() != 4)
+        {
+            return illegalValue(functionCode);
+        }
+        quint16 address = 0;
+        quint16 count = 0;
+        request.decodeData(&address, &count);
+        if (count == 0 || count > 2000)
+        {
+            return illegalValue(functionCode);
+        }
+        const QModbusDataUnit::RegisterType table = functionCode == QModbusPdu::ReadCoils
+            ? QModbusDataUnit::Coils
+            : QModbusDataUnit::DiscreteInputs;
+        QVector<quint16> values;
+        if (!read(slave, table, int(address), int(count), &values))
+        {
+            return illegalAddress(functionCode);
+        }
+        // 将 quint16 值转换为位打包的字节数组
+        const int byteCount = (count + 7) / 8;
+        QByteArray bytes(byteCount, 0);
+        for (int index = 0; index < count; ++index)
+        {
+            if (values.at(index) != 0)
+            {
+                const int byteIndex = index / 8;
+                const int bitIndex = index % 8;
+                bytes.data()[byteIndex] |= char(1 << bitIndex);
+            }
+        }
+        QModbusResponse response(functionCode);
+        QByteArray data;
+        data.append(char(byteCount));
+        data.append(bytes);
+        response.setData(data);
+        return response;
+    }
     case QModbusPdu::ReadHoldingRegisters:
     case QModbusPdu::ReadInputRegisters:
     {
@@ -435,6 +539,61 @@ QModbusResponse ModbusRegisterStore::processRequest(quint8 slaveAddress, const Q
             values[index] = quint16((quint8(payload.at(index * 2)) << 8) | quint8(payload.at(index * 2 + 1)));
         }
         if (!write(slave, QModbusDataUnit::HoldingRegisters, int(address), values))
+        {
+            return illegalAddress(functionCode);
+        }
+        return QModbusResponse(functionCode, address, count);
+    }
+    case QModbusPdu::WriteSingleCoil:
+    {
+        if (request.dataSize() != 4)
+        {
+            return illegalValue(functionCode);
+        }
+        quint16 address = 0;
+        quint16 value = 0;
+        request.decodeData(&address, &value);
+        // Modbus 规范：0xFF00 = ON, 0x0000 = OFF
+        if (value != 0xFF00 && value != 0x0000)
+        {
+            return illegalValue(functionCode);
+        }
+        const quint16 coilValue = (value == 0xFF00) ? 1 : 0;
+        if (!writeOne(slave, QModbusDataUnit::Coils, int(address), coilValue))
+        {
+            return illegalAddress(functionCode);
+        }
+        return QModbusResponse(functionCode, address, value);
+    }
+    case QModbusPdu::WriteMultipleCoils:
+    {
+        if (request.dataSize() < 5)
+        {
+            return illegalValue(functionCode);
+        }
+        quint16 address = 0;
+        quint16 count = 0;
+        quint8 byteCount = 0;
+        request.decodeData(&address, &count, &byteCount);
+        const int expectedByteCount = (count + 7) / 8;
+        if (count == 0 || count > 1968 || byteCount != expectedByteCount || request.dataSize() != 5 + byteCount)
+        {
+            return illegalValue(functionCode);
+        }
+        const QByteArray payload = request.data().mid(5);
+        if (payload.size() != byteCount)
+        {
+            return illegalValue(functionCode);
+        }
+        // 解包位到 quint16 向量
+        QVector<quint16> values(count);
+        for (int index = 0; index < count; ++index)
+        {
+            const int byteIndex = index / 8;
+            const int bitIndex = index % 8;
+            values[index] = ((quint8(payload.at(byteIndex)) >> bitIndex) & 1) ? 1 : 0;
+        }
+        if (!write(slave, QModbusDataUnit::Coils, int(address), values))
         {
             return illegalAddress(functionCode);
         }

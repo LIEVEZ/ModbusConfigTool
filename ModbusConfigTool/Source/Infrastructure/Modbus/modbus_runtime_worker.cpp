@@ -18,14 +18,27 @@ struct PointRange
     int end;
 };
 
-// 把一个分组内指定表的点位按从站合并成连续区间，输出 S3[4096-4096] 形式。
+// storageType → Modbus 表类型统一映射
+QModbusDataUnit::RegisterType registerTypeFor(StorageType storage)
+{
+    switch (storage)
+    {
+    case StorageType::Coil: return QModbusDataUnit::Coils;
+    case StorageType::Discrete: return QModbusDataUnit::DiscreteInputs;
+    case StorageType::Input: return QModbusDataUnit::InputRegisters;
+    case StorageType::Holding:
+    default: return QModbusDataUnit::HoldingRegisters;
+    }
+}
+
+// 把一个分组内指定功能码的点位按从站合并成连续区间，输出 S3[4096-4096] 形式。
 // 仅用于日志展示，不改变实际映射块（由 ModbusRegisterStore 管理）。
-QString mergeRangesText(const QList<RegisterPoint> &points, StorageType table)
+QString mergeRangesText(const QList<RegisterPoint> &points, quint8 functionCode)
 {
     QVector<PointRange> ranges;
     for (const RegisterPoint &point : points)
     {
-        if (point.storageType != table)
+        if (point.readFunctionCode != functionCode)
         {
             continue;
         }
@@ -164,12 +177,31 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
         {
             mapped.slaveAddress = 1;
         }
+        // 根据读功能码自动推导 storageType，确保一致性
+        if (mapped.readFunctionCode == 0x01)
+        {
+            mapped.storageType = StorageType::Coil;
+        }
+        else if (mapped.readFunctionCode == 0x02)
+        {
+            mapped.storageType = StorageType::Discrete;
+        }
+        else if (mapped.readFunctionCode == 0x03)
+        {
+            mapped.storageType = StorageType::Holding;
+        }
+        else if (mapped.readFunctionCode == 0x04)
+        {
+            mapped.storageType = StorageType::Input;
+        }
         m_points.insert(mapped.id, mapped);
         enabledPoints.append(mapped);
     }
 
     m_store.build(enabledPoints, StorageType::Holding);
     m_store.build(enabledPoints, StorageType::Input);
+    m_store.build(enabledPoints, StorageType::Coil);
+    m_store.build(enabledPoints, StorageType::Discrete);
 
     const QList<quint8> slaves = m_store.slaveAddresses();
     QStringList slaveText;
@@ -179,14 +211,18 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
     }
 
     emit diagnostics(QStringLiteral(
-        "收到点位 %1，映射 %2；从站[%3]；Holding %4 块 %5；Input %6 块 %7")
+        "收到点位 %1，映射 %2；从站[%3]；Holding %4 块 %5；Input %6 块 %7；Coil %8 块 %9；Discrete %10 块 %11")
         .arg(points.size())
         .arg(m_points.size())
         .arg(slaveText.isEmpty() ? QStringLiteral("-") : slaveText.join(QLatin1Char(',')))
         .arg(m_store.blockCount(QModbusDataUnit::HoldingRegisters))
         .arg(m_store.summary(QModbusDataUnit::HoldingRegisters))
         .arg(m_store.blockCount(QModbusDataUnit::InputRegisters))
-        .arg(m_store.summary(QModbusDataUnit::InputRegisters)));
+        .arg(m_store.summary(QModbusDataUnit::InputRegisters))
+        .arg(m_store.blockCount(QModbusDataUnit::Coils))
+        .arg(m_store.summary(QModbusDataUnit::Coils))
+        .arg(m_store.blockCount(QModbusDataUnit::DiscreteInputs))
+        .arg(m_store.summary(QModbusDataUnit::DiscreteInputs)));
 
     // 按分组输出地址映射，便于确认每个分组绑定了哪些寄存器区间
     QHash<QString, QList<RegisterPoint>> pointsByGroup;
@@ -199,9 +235,22 @@ void ModbusRuntimeWorker::rebuildMap(const QList<RegisterPoint> &points, bool re
     for (auto it = pointsByGroup.constBegin(); it != pointsByGroup.constEnd(); ++it)
     {
         const QString label = m_groupNames.value(it.key(), QStringLiteral("未命名分组"));
-        const QString holdingText = mergeRangesText(it.value(), StorageType::Holding);
-        const QString inputText = mergeRangesText(it.value(), StorageType::Input);
+
+        // 按功能码分组显示（支持同地址不同功能码）
+        const QString coilText = mergeRangesText(it.value(), 0x01);
+        const QString discreteText = mergeRangesText(it.value(), 0x02);
+        const QString holdingText = mergeRangesText(it.value(), 0x03);
+        const QString inputText = mergeRangesText(it.value(), 0x04);
+
         QStringList sections;
+        if (!coilText.isEmpty())
+        {
+            sections.append(QStringLiteral("Coil %1").arg(coilText));
+        }
+        if (!discreteText.isEmpty())
+        {
+            sections.append(QStringLiteral("Discrete %1").arg(discreteText));
+        }
         if (!holdingText.isEmpty())
         {
             sections.append(QStringLiteral("Holding %1").arg(holdingText));
@@ -268,8 +317,7 @@ void ModbusRuntimeWorker::handleDataWritten(quint8 slaveAddress,
         {
             continue;
         }
-        const QModbusDataUnit::RegisterType pointTable = point.storageType == StorageType::Holding
-            ? QModbusDataUnit::HoldingRegisters : QModbusDataUnit::InputRegisters;
+        const QModbusDataUnit::RegisterType pointTable = registerTypeFor(point.storageType);
         const int pointEnd = int(point.address) + point.registerCount - 1;
         const int writeEnd = address + size - 1;
         if (pointTable != table || point.address > writeEnd || address > pointEnd)
@@ -317,8 +365,7 @@ void ModbusRuntimeWorker::writePoint(const QString &pointId,
     {
         return;
     }
-    const QModbusDataUnit::RegisterType table = point.storageType == StorageType::Holding
-        ? QModbusDataUnit::HoldingRegisters : QModbusDataUnit::InputRegisters;
+    const QModbusDataUnit::RegisterType table = registerTypeFor(point.storageType);
     for (int index = 0; index < converted.registers.size(); ++index)
     {
         if (!m_store.writeOne(point.slaveAddress, table, int(point.address) + index, converted.registers.at(index)))

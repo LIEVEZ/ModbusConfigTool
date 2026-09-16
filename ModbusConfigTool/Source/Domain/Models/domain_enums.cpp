@@ -6,6 +6,7 @@ QString dataTypeToString(DataType type)
 {
     switch (type)
     {
+    case DataType::Bool: return QStringLiteral("BOOL");
     case DataType::Int16: return QStringLiteral("INT16");
     case DataType::UInt16: return QStringLiteral("UINT16");
     case DataType::Int32: return QStringLiteral("INT32");
@@ -27,6 +28,11 @@ bool dataTypeFromString(const QString &text, DataType *type)
 
     const QString value = text.trimmed().toUpper();
     // 兼容旧协议/CSV 别名
+    if (value == QStringLiteral("BOOL") || value == QStringLiteral("BOOLEAN"))
+    {
+        *type = DataType::Bool;
+        return true;
+    }
     if (value == QStringLiteral("FLOAT") || value == QStringLiteral("FLOAT32"))
     {
         *type = DataType::Float32;
@@ -40,9 +46,9 @@ bool dataTypeFromString(const QString &text, DataType *type)
         return true;
     }
 
-    const QList<DataType> types = {DataType::Int16, DataType::UInt16, DataType::Int32,
-                                   DataType::UInt32, DataType::Float32, DataType::Int64,
-                                   DataType::UInt64, DataType::Float64};
+    const QList<DataType> types = {DataType::Bool, DataType::Int16, DataType::UInt16,
+                                   DataType::Int32, DataType::UInt32, DataType::Float32,
+                                   DataType::Int64, DataType::UInt64, DataType::Float64};
     for (DataType candidate : types)
     {
         if (dataTypeToString(candidate) == value)
@@ -80,15 +86,30 @@ bool endianFromString(const QString &text, Endian *endian)
     if (value == QStringLiteral("LITTLE")) { *endian = Endian::Little; return true; }
     if (value == QStringLiteral("LITSWAP")) { *endian = Endian::LittleSwap; return true; }
     if (value == QStringLiteral("BIGSWAP")) { *endian = Endian::BigSwap; return true; }
-    if (value == QStringLiteral("BIGBCD")) { *endian = Endian::BigBcd; return true; }
-    if (value == QStringLiteral("LITBCD")) { *endian = Endian::LittleBcd; return true; }
+    // BCD 别名：BCD 等价 BIGBCD（高位字节在前），LBCD 等价 LITBCD
+    if (value == QStringLiteral("BIGBCD") || value == QStringLiteral("BCD"))
+    {
+        *endian = Endian::BigBcd;
+        return true;
+    }
+    if (value == QStringLiteral("LITBCD") || value == QStringLiteral("LBCD"))
+    {
+        *endian = Endian::LittleBcd;
+        return true;
+    }
     return false;
 }
 
 QString storageTypeToString(StorageType type)
 {
-    return type == StorageType::Holding ? QStringLiteral("holding")
-                                        : QStringLiteral("input");
+    switch (type)
+    {
+    case StorageType::Holding: return QStringLiteral("holding");
+    case StorageType::Input: return QStringLiteral("input");
+    case StorageType::Coil: return QStringLiteral("coil");
+    case StorageType::Discrete: return QStringLiteral("discrete");
+    default: return QStringLiteral("holding");
+    }
 }
 
 bool storageTypeFromString(const QString &text, StorageType *type)
@@ -96,6 +117,8 @@ bool storageTypeFromString(const QString &text, StorageType *type)
     const QString value = text.trimmed().toLower();
     if (value == QStringLiteral("holding")) { *type = StorageType::Holding; return true; }
     if (value == QStringLiteral("input")) { *type = StorageType::Input; return true; }
+    if (value == QStringLiteral("coil")) { *type = StorageType::Coil; return true; }
+    if (value == QStringLiteral("discrete")) { *type = StorageType::Discrete; return true; }
     return false;
 }
 

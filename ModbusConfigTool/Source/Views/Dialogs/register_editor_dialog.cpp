@@ -127,9 +127,13 @@ RegisterEditorDialog::RegisterEditorDialog(const RegisterPoint &point,
     m_address = new QSpinBox(commBody);
     m_address->setRange(0, 65535);
     m_storage = new QComboBox(commBody);
-    m_storage->addItems({QStringLiteral("holding"), QStringLiteral("input")});
+    m_storage->addItems({
+        QStringLiteral("holding"), QStringLiteral("input"),
+        QStringLiteral("coil"), QStringLiteral("discrete")
+    });
     m_dataType = new QComboBox(commBody);
     m_dataType->addItems({
+        QStringLiteral("BOOL"),
         QStringLiteral("INT16"), QStringLiteral("UINT16"), QStringLiteral("INT32"),
         QStringLiteral("UINT32"), QStringLiteral("FLOAT32"), QStringLiteral("FLOAT"),
         QStringLiteral("INT64"), QStringLiteral("UINT64"), QStringLiteral("FLOAT64"),
@@ -138,7 +142,8 @@ RegisterEditorDialog::RegisterEditorDialog(const RegisterPoint &point,
     m_endian = new QComboBox(commBody);
     m_endian->addItems({
         QStringLiteral("BIG"), QStringLiteral("LITTLE"), QStringLiteral("LITSWAP"),
-        QStringLiteral("BIGSWAP"), QStringLiteral("BIGBCD"), QStringLiteral("LITBCD")
+        QStringLiteral("BIGSWAP"), QStringLiteral("BIGBCD"), QStringLiteral("BCD"),
+        QStringLiteral("LITBCD"), QStringLiteral("LBCD")
     });
     m_registerCount = new QLabel(commBody);
     m_readCode = new QLabel(commBody);
@@ -330,10 +335,26 @@ RegisterPoint RegisterEditorDialog::point() const
 
     output.minimumValue = ProjectFactory::minimumFor(output.dataType);
     output.maximumValue = ProjectFactory::maximumFor(output.dataType);
-    output.readFunctionCode = output.storageType == StorageType::Holding ? 3 : 4;
-    output.writeFunctionCode = output.storageType == StorageType::Holding
-        ? (output.registerCount == 1 ? 6 : 16)
-        : 0;
+    switch (output.storageType)
+    {
+    case StorageType::Coil:
+        output.readFunctionCode = 1;
+        output.writeFunctionCode = output.registerCount == 1 ? 5 : 15;
+        break;
+    case StorageType::Discrete:
+        output.readFunctionCode = 2;
+        output.writeFunctionCode = 0;
+        break;
+    case StorageType::Input:
+        output.readFunctionCode = 4;
+        output.writeFunctionCode = 0;
+        break;
+    case StorageType::Holding:
+    default:
+        output.readFunctionCode = 3;
+        output.writeFunctionCode = output.registerCount == 1 ? 6 : 16;
+        break;
+    }
     output.strategy = m_strategyEditor->strategy();
     return output;
 }
@@ -393,8 +414,28 @@ void RegisterEditorDialog::refreshDerivedFields()
     storageTypeFromString(m_storage->currentText(), &storage);
 
     const quint16 count = ProjectFactory::registerCountFor(type);
-    const int readCode = storage == StorageType::Holding ? 3 : 4;
-    const int writeCode = storage == StorageType::Holding ? (count == 1 ? 6 : 16) : 0;
+    int readCode = 3;
+    int writeCode = 0;
+    switch (storage)
+    {
+    case StorageType::Coil:
+        readCode = 1;
+        writeCode = count == 1 ? 5 : 15;
+        break;
+    case StorageType::Discrete:
+        readCode = 2;
+        writeCode = 0;
+        break;
+    case StorageType::Input:
+        readCode = 4;
+        writeCode = 0;
+        break;
+    case StorageType::Holding:
+    default:
+        readCode = 3;
+        writeCode = count == 1 ? 6 : 16;
+        break;
+    }
 
     m_registerCount->setText(QString::number(count));
     m_readCode->setText(functionCodeText(readCode));
@@ -420,9 +461,9 @@ void RegisterEditorDialog::refreshWriteAvailability()
 {
     StorageType storage = StorageType::Holding;
     storageTypeFromString(m_storage->currentText(), &storage);
-    const bool writable = storage == StorageType::Holding;
+    const bool writable = storage == StorageType::Holding || storage == StorageType::Coil;
     m_manualWriteButton->setEnabled(writable);
     m_manualWriteButton->setToolTip(writable
         ? QStringLiteral("将当前值写入设备")
-        : QStringLiteral("input 存储区不支持写入"));
+        : QStringLiteral("input/discrete 存储区不支持写入"));
 }

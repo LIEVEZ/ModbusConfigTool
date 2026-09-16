@@ -35,6 +35,30 @@ ValueResult RegisterValue::fromText(DataType type, const QString &text)
 
     switch (type)
     {
+    case DataType::Bool:
+    {
+        // 接受 true/false/1/0（大小写不敏感）
+        const QString normalized = text.trimmed().toLower();
+        quint64 value = 0;
+        valid = true;
+        if (normalized == QStringLiteral("true") || normalized == QStringLiteral("1")
+            || normalized == QStringLiteral("yes") || normalized == QStringLiteral("on"))
+        {
+            value = 1;
+        }
+        else if (normalized == QStringLiteral("false") || normalized == QStringLiteral("0")
+                 || normalized == QStringLiteral("no") || normalized == QStringLiteral("off")
+                 || normalized.isEmpty())
+        {
+            value = 0;
+        }
+        else
+        {
+            valid = false;
+        }
+        output.value = fromUnsigned64(value, type);
+        break;
+    }
     case DataType::Int16:
     case DataType::Int32:
     case DataType::Int64:
@@ -98,6 +122,10 @@ QString RegisterValue::toStorageString() const
 
 QString RegisterValue::toDisplayString(int precision) const
 {
+    if (m_type == DataType::Bool)
+    {
+        return toUnsigned64() != 0 ? QStringLiteral("true") : QStringLiteral("false");
+    }
     if (m_type == DataType::Float32 || m_type == DataType::Float64)
     {
         // 浮点用 g 格式，避免超大/超小数被 f+低精度裁成难读长整数，并尽量完整展示有效数字。

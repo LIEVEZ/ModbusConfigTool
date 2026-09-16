@@ -46,6 +46,7 @@ quint16 ProjectFactory::registerCountFor(DataType type)
 {
     switch (type)
     {
+    case DataType::Bool:
     case DataType::Int16:
     case DataType::UInt16: return 1;
     case DataType::Int32:
@@ -62,6 +63,7 @@ RegisterValue ProjectFactory::minimumFor(DataType type)
 {
     switch (type)
     {
+    case DataType::Bool: return RegisterValue::fromUnsigned64(0, type);
     case DataType::Int16: return RegisterValue::fromSigned64(-32768, type);
     case DataType::UInt16: return RegisterValue::fromUnsigned64(0, type);
     case DataType::Int32: return RegisterValue::fromSigned64(-2147483648LL, type);
@@ -78,6 +80,7 @@ RegisterValue ProjectFactory::maximumFor(DataType type)
 {
     switch (type)
     {
+    case DataType::Bool: return RegisterValue::fromUnsigned64(1, type);
     case DataType::Int16: return RegisterValue::fromSigned64(32767, type);
     case DataType::UInt16: return RegisterValue::fromUnsigned64(65535, type);
     case DataType::Int32: return RegisterValue::fromSigned64(2147483647LL, type);

@@ -25,6 +25,8 @@ public:
     {
         QVector<Block> holding;
         QVector<Block> input;
+        QVector<Block> coil;
+        QVector<Block> discrete;
     };
 
     void clear();

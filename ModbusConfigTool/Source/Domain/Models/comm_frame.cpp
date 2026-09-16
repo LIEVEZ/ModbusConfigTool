@@ -14,7 +14,10 @@ void fillAddressQuantity(const QModbusPdu &pdu, int *address, int *quantity)
     const auto functionCode = pdu.functionCode();
     if (functionCode == QModbusPdu::ReadHoldingRegisters
         || functionCode == QModbusPdu::ReadInputRegisters
-        || functionCode == QModbusPdu::WriteMultipleRegisters)
+        || functionCode == QModbusPdu::WriteMultipleRegisters
+        || functionCode == QModbusPdu::ReadCoils
+        || functionCode == QModbusPdu::ReadDiscreteInputs
+        || functionCode == QModbusPdu::WriteMultipleCoils)
     {
         if (pdu.dataSize() >= 4)
         {
@@ -25,7 +28,8 @@ void fillAddressQuantity(const QModbusPdu &pdu, int *address, int *quantity)
             *quantity = int(qty);
         }
     }
-    else if (functionCode == QModbusPdu::WriteSingleRegister)
+    else if (functionCode == QModbusPdu::WriteSingleRegister
+             || functionCode == QModbusPdu::WriteSingleCoil)
     {
         if (pdu.dataSize() >= 4)
         {
@@ -109,7 +113,9 @@ CommFrame CommFrameFactory::fromResponse(const QModbusPdu &response, const CommF
         frame.success = true;
         frame.exceptionCode = -1;
         if (response.functionCode() == QModbusPdu::WriteSingleRegister
-            || response.functionCode() == QModbusPdu::WriteMultipleRegisters)
+            || response.functionCode() == QModbusPdu::WriteMultipleRegisters
+            || response.functionCode() == QModbusPdu::WriteSingleCoil
+            || response.functionCode() == QModbusPdu::WriteMultipleCoils)
         {
             fillAddressQuantity(response, &frame.address, &frame.quantity);
         }
