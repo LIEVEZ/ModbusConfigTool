@@ -74,6 +74,8 @@ public:
     // 运行时写点位
     void writePoint(const QString &pointId, const RegisterValue &value);
     void writePoints(const QList<QPair<QString, RegisterValue>> &values);
+    // 从寄存器存储重读所有运行中端口的点位当前值
+    void refreshValues();
 
 signals:
     void documentChanged();

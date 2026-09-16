@@ -28,6 +28,7 @@ signals:
     void editRegisterRequested(const QString &registerId);
     void valueWriteRequested(const QString &pointId, const RegisterValue &value);
     void bulkValuesWriteRequested(const QList<QPair<QString, RegisterValue>> &values);
+    void refreshValuesRequested();
 
 private slots:
     void onItemChanged(QTableWidgetItem *item);

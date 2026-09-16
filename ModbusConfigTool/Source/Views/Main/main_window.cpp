@@ -866,6 +866,8 @@ void MainWindow::showGroupRealtime(const QString &groupId)
     {
         panel->updateValues(m_viewModel->document());
     });
+    connect(panel, &GroupRealtimePanel::refreshValuesRequested, m_viewModel,
+            &MainWindowViewModel::refreshValues);
     panel->show();
 }
 

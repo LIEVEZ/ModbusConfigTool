@@ -341,15 +341,67 @@ void ModbusRuntimeWorker::handleDataWritten(quint8 slaveAddress,
             continue;
         }
 
-        const ValueResult decoded = ValueConverter::fromRegisters(point.dataType, point.endian, registers);
-        if (decoded.result.success)
-        {
-            RegisterPoint updated = point;
-            updated.currentValue = decoded.value;
-            m_points.insert(updated.id, updated);
-            emit valueChanged(updated.id, decoded.value);
-        }
+        applyDecodedPoint(point, registers);
     }
+}
+
+void ModbusRuntimeWorker::applyDecodedPoint(const RegisterPoint &point,
+                                            const QVector<quint16> &registers)
+{
+    const ValueResult decoded = ValueConverter::fromRegisters(point.dataType, point.endian, registers);
+    if (decoded.result.success)
+    {
+        RegisterPoint updated = point;
+        updated.currentValue = decoded.value;
+        m_points.insert(updated.id, updated);
+        emit valueChanged(updated.id, decoded.value);
+        return;
+    }
+
+    // BCD 等编码解码失败（如写入值含非法 BCD 半字节）时，
+    // 仍以无符号原始值更新显示，避免写入成功但界面静止无反馈。
+    const quint64 raw = ValueConverter::registersToUnsigned64(registers);
+    RegisterValue rawValue = RegisterValue::fromUnsigned64(raw, point.dataType);
+    RegisterPoint updated = point;
+    updated.currentValue = rawValue;
+    m_points.insert(updated.id, updated);
+    emit valueChanged(updated.id, rawValue);
+    emit diagnostics(QStringLiteral("点位「%1」解码失败（编码 %2）：%3，已按原始值显示")
+                         .arg(point.name.isEmpty() ? point.id : point.name,
+                              endianToString(point.endian),
+                              decoded.result.message));
+}
+
+void ModbusRuntimeWorker::refreshValues()
+{
+    if (m_points.isEmpty() || m_store.isEmpty())
+    {
+        return;
+    }
+
+    int refreshed = 0;
+    for (const RegisterPoint &point : m_points)
+    {
+        const QModbusDataUnit::RegisterType table = registerTypeFor(point.storageType);
+        QVector<quint16> registers;
+        for (int offset = 0; offset < point.registerCount; ++offset)
+        {
+            quint16 registerValue = 0;
+            if (!m_store.readOne(point.slaveAddress, table, int(point.address) + offset, &registerValue))
+            {
+                registers.clear();
+                break;
+            }
+            registers.append(registerValue);
+        }
+        if (registers.size() != point.registerCount)
+        {
+            continue;
+        }
+        applyDecodedPoint(point, registers);
+        ++refreshed;
+    }
+    emit diagnostics(QStringLiteral("已从寄存器存储刷新 %1 个点位当前值").arg(refreshed));
 }
 
 void ModbusRuntimeWorker::writePoint(const QString &pointId,

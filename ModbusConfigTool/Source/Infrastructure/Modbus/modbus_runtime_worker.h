@@ -27,6 +27,7 @@ public slots:
                       const QHash<QString, QString> &groupNames);
     void stop();
     void writePoint(const QString &pointId, const RegisterValue &value);
+    void refreshValues();
 
 signals:
     void started();
@@ -38,6 +39,7 @@ signals:
 
 private:
     void handleDataWritten(quint8 slaveAddress, QModbusDataUnit::RegisterType table, int address, int size);
+    void applyDecodedPoint(const RegisterPoint &point, const QVector<quint16> &registers);
     void rebuildMap(const QList<RegisterPoint> &points, bool restartStrategy);
 
     MultiSlaveModbusServer *m_server = nullptr;

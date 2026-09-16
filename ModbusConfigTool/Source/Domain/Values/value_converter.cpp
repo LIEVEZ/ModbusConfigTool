@@ -428,6 +428,16 @@ ConversionResult ValueConverter::toRegisters(const RegisterValue &value, Endian 
     return output;
 }
 
+quint64 ValueConverter::registersToUnsigned64(const QVector<quint16> &registers)
+{
+    quint64 value = 0;
+    for (quint16 reg : registers)
+    {
+        value = (value << 16) | quint64(reg);
+    }
+    return value;
+}
+
 ValueResult ValueConverter::fromRegisters(DataType type,
                                           Endian endian,
                                           const QVector<quint16> &registers)

@@ -25,6 +25,7 @@ public:
     void stopAll();
     void reloadRunningPorts(const ProjectDocument &document);
     void writePoint(const QString &pointId, const RegisterValue &value);
+    void refreshValues();
 
 signals:
     void portStateChanged(const QString &portId, RuntimeState state);

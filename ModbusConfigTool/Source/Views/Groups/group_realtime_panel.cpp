@@ -182,7 +182,16 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
     resetButton->setMenu(resetMenu);
     resetButton->setDefaultAction(resetFilteredAction);
 
+    auto *refreshButton = new QToolButton(searchBar);
+    refreshButton->setObjectName(QStringLiteral("realtimeRefreshButton"));
+    refreshButton->setText(QStringLiteral("刷新"));
+    refreshButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    refreshButton->setFixedHeight(32);
+    refreshButton->setCursor(Qt::PointingHandCursor);
+    refreshButton->setToolTip(QStringLiteral("从寄存器存储重新读取全部点位当前值"));
+
     searchLayout->addWidget(m_searchEdit, 1);
+    searchLayout->addWidget(refreshButton, 0);
     searchLayout->addWidget(randomButton, 0);
     searchLayout->addWidget(resetButton, 0);
 
@@ -258,6 +267,10 @@ GroupRealtimePanel::GroupRealtimePanel(const QString &groupId,
         applyGeneratedValues(true, true);
     });
     connect(resetButton, &QToolButton::clicked, resetFilteredAction, &QAction::trigger);
+
+    connect(refreshButton, &QToolButton::clicked, this, [this]() {
+        emit refreshValuesRequested();
+    });
 
     updateValues(doc);
 }

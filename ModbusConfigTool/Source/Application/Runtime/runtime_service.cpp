@@ -240,6 +240,17 @@ void RuntimeService::writePoint(const QString &pointId, const RegisterValue &val
     }
 }
 
+void RuntimeService::refreshValues()
+{
+    for (auto it = m_ports.constBegin(); it != m_ports.constEnd(); ++it)
+    {
+        if (it.value().worker && it.value().state == RuntimeState::Running)
+        {
+            QMetaObject::invokeMethod(it.value().worker, "refreshValues", Qt::QueuedConnection);
+        }
+    }
+}
+
 void RuntimeService::teardownPort(const QString &portId)
 {
     PortRuntime runtime = m_ports.value(portId);

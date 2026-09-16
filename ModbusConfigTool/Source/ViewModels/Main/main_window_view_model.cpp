@@ -216,6 +216,11 @@ void MainWindowViewModel::writePoint(const QString &pointId, const RegisterValue
     m_runtimeService->writePoint(pointId, value);
 }
 
+void MainWindowViewModel::refreshValues()
+{
+    m_runtimeService->refreshValues();
+}
+
 void MainWindowViewModel::writePoints(const QList<QPair<QString, RegisterValue>> &values)
 {
     if (values.isEmpty())
